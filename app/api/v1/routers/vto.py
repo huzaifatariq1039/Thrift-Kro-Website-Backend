@@ -44,6 +44,7 @@ async def run_vto_inference(
 async def generate_vton(
     person_image: UploadFile = File(...),
     garment_image: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Virtual Try-On generation.

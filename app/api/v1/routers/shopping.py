@@ -7,7 +7,7 @@ from uuid import UUID
 
 from app.models.user import User
 from app.models.order import PaymentMethodEnum
-from app.schemas.shopping import CartSummary, WishlistSummary
+from app.schemas.shopping import CartSummary, WishlistSummary, CartCheckoutRequest
 from app.api.deps import get_db, get_current_active_user
 import app.crud.shopping as crud_shopping
 import app.crud.order as crud_order
@@ -49,7 +49,7 @@ def remove_from_cart(product_id: UUID, db: Session = Depends(get_db), current_us
 
 
 @router.post("/cart/checkout")
-def checkout_cart(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def checkout_cart(payload: CartCheckoutRequest = CartCheckoutRequest(), db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Checkout the entire cart.
     Since this is a C2C platform, this converts each CartItem into a separate Order.
@@ -62,8 +62,6 @@ def checkout_cart(db: Session = Depends(get_db), current_user: User = Depends(ge
     total_cart_price = sum(item.product.price for item in items if item.product)
     
     # Calculate total with fees (assuming flat shipping fee + standard escrow fee per item)
-    # This logic mimics what crud_order.create_order does, but we need to check the total 
-    # wallet balance beforehand.
     total_amount_needed = 0.0
     for item in items:
         if not item.product:
@@ -82,6 +80,8 @@ def checkout_cart(db: Session = Depends(get_db), current_user: User = Depends(ge
     created_orders = []
     from app.schemas.order import OrderCreate
     
+    shipping_addr = payload.shipping_address or "Saved User Address"
+
     # Process each item
     for item in items:
         if not item.product:
@@ -89,7 +89,7 @@ def checkout_cart(db: Session = Depends(get_db), current_user: User = Depends(ge
             
         order_create = OrderCreate(
             product_id=item.product.id,
-            shipping_address="Saved User Address", # In a real app, this comes from the checkout request
+            shipping_address=shipping_addr,
             payment_method=PaymentMethodEnum.WALLET
         )
         

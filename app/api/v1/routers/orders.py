@@ -26,15 +26,28 @@ def get_orders(db: Session = Depends(get_db), current_user: User = Depends(get_c
 
 @router.put("/{id}/status", response_model=OrderResponse)
 def update_order_status(id: UUID, status: OrderStatusEnum, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    # Simple validation, in reality verify if user is allowed to update this specific status
-    db_order = crud_order.update_order_status(db=db, order_id=id, status=status)
+    existing_order = crud_order.get_orders_by_user(db=db, user_id=current_user.id, is_seller=True)
+    # Check order ownership or admin status
+    db_order = db.query(crud_order.Order).filter(crud_order.Order.id == id).first()
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
-    return db_order
+    
+    if current_user.role != RoleEnum.ADMIN and current_user.id not in (db_order.seller_id, db_order.buyer_id):
+        raise HTTPException(status_code=403, detail="Not authorized to update this order")
+        
+    updated_order = crud_order.update_order_status(db=db, order_id=id, status=status)
+    return updated_order
 
 @router.post("/{id}/release-escrow", response_model=OrderResponse)
 def release_escrow(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    db_order = crud_order.release_escrow(db=db, order_id=id)
+    db_order = db.query(crud_order.Order).filter(crud_order.Order.id == id).first()
     if not db_order:
-        raise HTTPException(status_code=400, detail="Order not found or not in DELIVERED status")
-    return db_order
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    if current_user.role != RoleEnum.ADMIN and current_user.id != db_order.buyer_id:
+        raise HTTPException(status_code=403, detail="Only the buyer can release escrow funds for this order")
+        
+    result_order = crud_order.release_escrow(db=db, order_id=id)
+    if not result_order:
+        raise HTTPException(status_code=400, detail="Order is not in DELIVERED status")
+    return result_order
