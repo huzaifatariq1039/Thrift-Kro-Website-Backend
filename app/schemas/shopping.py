@@ -34,3 +34,8 @@ class WishlistItemResponse(BaseModel):
 class WishlistSummary(BaseModel):
     items: List[WishlistItemResponse]
     total_items: int
+
+
+class CartCheckoutRequest(BaseModel):
+    shipping_address: str | None = "Default User Address"
+
