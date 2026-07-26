@@ -1,3 +1,4 @@
+
 """
 Thrift Kro Database Seed Script.
 
