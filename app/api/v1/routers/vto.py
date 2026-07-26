@@ -15,9 +15,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
-# Hugging Face VTON client (singleton)
+# Hugging Face VTON client (lazy singleton)
 # ---------------------------------------------------------------------------
-vton_client = Client("huzaifa39/thriftkro-vton-engine")
+_vton_client = None
+
+def get_vton_client():
+    global _vton_client
+    if _vton_client is None:
+        _vton_client = Client("huzaifa39/thriftkro-vton-engine")
+    return _vton_client
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +79,8 @@ async def generate_vton(
             shutil.copyfileobj(garment_image.file, f)
 
         # ---- call the Hugging Face Space ----
-        result = vton_client.predict(
+        client = get_vton_client()
+        result = client.predict(
             person=handle_file(temp_person_path),
             garment=handle_file(temp_garment_path),
             api_name="/predict",
