@@ -81,9 +81,9 @@ async def generate_vton(
         # ---- call the Hugging Face Space ----
         client = get_vton_client()
         result = client.predict(
-            person=handle_file(temp_person_path),
-            garment=handle_file(temp_garment_path),
-            api_name="/predict",
+            person_image_path=handle_file(temp_person_path),
+            garment_image_path=handle_file(temp_garment_path),
+            api_name="/process_vton",
         )
 
         # `result` is expected to be a local file path to the output image
