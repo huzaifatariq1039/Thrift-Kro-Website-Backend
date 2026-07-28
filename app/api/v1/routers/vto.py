@@ -50,6 +50,7 @@ async def run_vto_inference(
 async def generate_vton(
     person_image: UploadFile = File(...),
     garment_image: UploadFile = File(...),
+    category: str = Form(...),
     current_user: User = Depends(get_current_active_user),
 ):
     """
@@ -83,6 +84,7 @@ async def generate_vton(
         result = client.predict(
             person_image_path=handle_file(temp_person_path),
             garment_image_path=handle_file(temp_garment_path),
+            category=category,
             api_name="/process_vton",
         )
 
@@ -103,9 +105,15 @@ async def generate_vton(
         raise  # re-raise FastAPI HTTP exceptions as-is
     except Exception as exc:
         logger.exception("VTON generation failed")
+        err_str = str(exc).lower()
+        if "timeout" in err_str or "time out" in err_str:
+            detail_msg = "The AI Engine took too long to respond. Please try again later."
+        else:
+            detail_msg = f"VTON generation failed: {str(exc)}"
+            
         raise HTTPException(
             status_code=500,
-            detail=f"VTON generation failed: {str(exc)}",
+            detail=detail_msg,
         )
     finally:
         # ---- cleanup temp upload files ----
