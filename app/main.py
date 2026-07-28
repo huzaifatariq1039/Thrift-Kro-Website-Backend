@@ -11,7 +11,7 @@ app = FastAPI(
 )
 
 # CORS configuration reading strictly from ALLOWED_ORIGINS env variable
-raw_allowed_origins = os.environ["ALLOWED_ORIGINS"].strip()
+raw_allowed_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
 if not raw_allowed_origins:
     raise ValueError("ALLOWED_ORIGINS environment variable cannot be empty.")
 allowed_origins = [origin.strip() for origin in raw_allowed_origins.split(",") if origin.strip()]
