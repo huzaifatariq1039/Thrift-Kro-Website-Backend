@@ -9,9 +9,11 @@ from uuid import UUID
 from app.models.user import User
 from app.schemas.admin import AdminStatsResponse
 from app.schemas.support import TicketResponse, TicketUpdate
+from app.schemas.order import OrderResponse
 from app.api.deps import get_db, get_current_admin
 import app.crud.admin as crud_admin
 import app.crud.support as crud_support
+from app.models.order import Order
 
 router = APIRouter()
 
@@ -26,6 +28,18 @@ def get_dashboard_stats(
     Only accessible by ADMIN.
     """
     return crud_admin.get_platform_stats(db)
+
+
+@router.get("/orders", response_model=List[OrderResponse])
+def get_all_orders(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(get_current_admin)
+):
+    """
+    Get all orders on the platform for Escrow management.
+    Only accessible by ADMIN.
+    """
+    return db.query(Order).order_by(Order.created_at.desc()).all()
 
 
 @router.get("/tickets", response_model=List[TicketResponse])
