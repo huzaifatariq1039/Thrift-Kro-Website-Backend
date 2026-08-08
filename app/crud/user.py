@@ -44,8 +44,15 @@ def update_user(db: Session, user_id: str, user_update: UserUpdate):
         return None
     
     update_data = user_update.model_dump(exclude_unset=True)
+    
+    # Extract phone_number which belongs to SellerProfile
+    phone_number = update_data.pop("phone_number", None)
+    
     for key, value in update_data.items():
         setattr(db_user, key, value)
+        
+    if phone_number is not None and db_user.seller_profile:
+        db_user.seller_profile.phone_number = phone_number
         
     db.add(db_user)
     db.commit()

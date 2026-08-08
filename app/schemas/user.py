@@ -23,6 +23,8 @@ class GoogleAuthRequest(BaseModel):
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone_number: Optional[str] = None
 
 class SellerProfileResponse(BaseModel):
     """Nested seller profile data returned with UserResponse."""
