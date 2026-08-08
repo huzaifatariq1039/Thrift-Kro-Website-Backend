@@ -38,9 +38,9 @@ def startup_event():
         if not admin:
             crud_user.create_user(db, UserCreate(
                 email=admin_email,
-                name="System Admin",
+                full_name="System Admin",
                 password="Admin@123",
-                role="admin"
+                role="ADMIN"
             ))
             print("Admin user provisioned successfully.")
     finally:
