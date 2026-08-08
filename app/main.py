@@ -3,6 +3,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.core.config import settings
+from app.core.database import SessionLocal
+import app.crud.user as crud_user
+from app.schemas.user import UserCreate
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -25,6 +28,24 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
+
+@app.on_event("startup")
+def startup_event():
+    db = SessionLocal()
+    try:
+        admin_email = "admin@thriftkro.pk"
+        admin = crud_user.get_user_by_email(db, email=admin_email)
+        if not admin:
+            crud_user.create_user(db, UserCreate(
+                email=admin_email,
+                name="System Admin",
+                password="Admin@123",
+                role="admin"
+            ))
+            print("Admin user provisioned successfully.")
+    finally:
+        db.close()
+
 
 @app.get("/")
 def root():
