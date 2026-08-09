@@ -1,6 +1,6 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime, Enum, ARRAY
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, ForeignKey, DateTime, Enum, ARRAY, Boolean
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -31,6 +31,8 @@ class SellerVerificationRequest(Base):
     cnic_front_url = Column(String, nullable=False)
     cnic_back_url = Column(String, nullable=False)
     shop_photo_urls = Column(ARRAY(String), default=[])
+    products_proof = Column(JSONB, default=[])
+    ai_verified = Column(Boolean, default=False)
     business_reg_url = Column(String, nullable=True)
     
     # Review

@@ -3,6 +3,14 @@ from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
 from app.models.user import BusinessTypeEnum, VerificationStatusEnum
+from pydantic import Field
+
+class VerificationProductSchema(BaseModel):
+    name: str
+    sizes: str
+    price: str
+    description: str
+    images: List[str]
 
 
 class SellerVerificationCreate(BaseModel):
@@ -16,6 +24,8 @@ class SellerVerificationCreate(BaseModel):
     cnic_front_url: str
     cnic_back_url: str
     shop_photo_urls: List[str] = []
+    products_proof: List[VerificationProductSchema] = []
+    ai_verified: bool = False
     business_reg_url: Optional[str] = None
 
 
@@ -32,6 +42,8 @@ class SellerVerificationResponse(BaseModel):
     cnic_front_url: str
     cnic_back_url: str
     shop_photo_urls: List[str] = []
+    products_proof: List[VerificationProductSchema] = []
+    ai_verified: bool = False
     business_reg_url: Optional[str] = None
     status: VerificationStatusEnum
     rejection_reason: Optional[str] = None
