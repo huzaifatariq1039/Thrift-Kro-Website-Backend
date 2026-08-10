@@ -7,6 +7,7 @@ from pydantic import Field
 
 class VerificationProductSchema(BaseModel):
     name: str
+    category: Optional[str] = None
     sizes: str
     price: str
     description: str
