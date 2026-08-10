@@ -16,6 +16,7 @@ from sqlalchemy import func as sa_func
 
 from app.models.seller_verification import SellerVerificationRequest
 from app.models.user import SellerProfile, VerificationStatusEnum
+from app.models.product import Product, ConditionEnum
 
 # Constants
 MAX_SUBMISSIONS_PER_DAY = 3
@@ -163,6 +164,28 @@ def review_verification_request(
             profile.is_verified = True
             profile.verification_status = VerificationStatusEnum.APPROVED
             profile.verified_at = now
+            
+            # Create products from proof
+            if request.products_proof:
+                for prod_data in request.products_proof:
+                    new_prod = Product(
+                        seller_id=profile.user_id,
+                        name=prod_data.get("name", "Product"),
+                        description=prod_data.get("description", ""),
+                        price=float(prod_data.get("price", 0)),
+                        original_price=float(prod_data.get("price", 0)) * 1.4,
+                        image_url=prod_data.get("images", [""])[0] if prod_data.get("images") else "https://placeholder.thriftkro.pk/prod.jpg",
+                        images=prod_data.get("images", []),
+                        category=prod_data.get("category", "All"),
+                        department="Unisex",
+                        size=prod_data.get("sizes", "M"),
+                        brand="Thrift",
+                        condition=ConditionEnum.EXCELLENT,
+                        is_ai_verified=True,
+                        verified_at=now
+                    )
+                    db.add(new_prod)
+                    
         elif status == VerificationStatusEnum.REJECTED:
             profile.is_verified = False
             profile.verification_status = VerificationStatusEnum.REJECTED
