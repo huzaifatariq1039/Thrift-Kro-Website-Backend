@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -15,10 +15,10 @@ class ProductBase(BaseModel):
     brand: Optional[str] = None
     condition: ConditionEnum
     tags: List[str] = []
+    image_url: str
+    images: List[str] = []
 
 class ProductCreate(ProductBase):
-    image_url: str
-    images: List[str] = []  # Additional listing photos for AI verification
     condition_score: Optional[int] = None
     is_ai_verified: bool = False
 
@@ -34,17 +34,29 @@ class ProductUpdate(BaseModel):
     condition: Optional[ConditionEnum] = None
     tags: Optional[List[str]] = None
     status: Optional[StatusEnum] = None
+    image_url: Optional[str] = None
+    images: Optional[List[str]] = None
 
 class ProductResponse(ProductBase):
     id: UUID
     seller_id: UUID
-    image_url: str
-    images: List[str] = []
-    condition_score: Optional[int]
-    is_ai_verified: bool
+    seller_name: Optional[str] = None
+    seller_rating: float = 4.8
+    condition_score: Optional[int] = None
+    is_ai_verified: bool = False
     verification_hash: Optional[str] = None
     verified_at: Optional[datetime] = None
     status: StatusEnum
+
+    @model_validator(mode="before")
+    def set_seller_name(cls, data):
+        if not getattr(data, "seller_name", None) and hasattr(data, "seller"):
+            seller = data.seller
+            if seller and hasattr(seller, "seller_profile") and seller.seller_profile:
+                data.seller_name = seller.seller_profile.shop_name
+            elif seller and hasattr(seller, "full_name"):
+                data.seller_name = seller.full_name
+        return data
 
     class Config:
         from_attributes = True
