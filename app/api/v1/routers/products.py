@@ -35,11 +35,13 @@ def get_products(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     sort_by: Optional[str] = "newest",
+    include_deleted: Optional[bool] = False,
     db: Session = Depends(get_db)
 ):
     products = crud_product.get_products(
         db, skip=skip, limit=limit, category=category, department=department, 
-        brand=brand, q=q, min_price=min_price, max_price=max_price, sort_by=sort_by
+        brand=brand, q=q, min_price=min_price, max_price=max_price, sort_by=sort_by,
+        include_deleted=include_deleted
     )
     return products
 
@@ -285,4 +287,17 @@ def delete_product(id: UUID, db: Session = Depends(get_db), current_seller: User
         raise HTTPException(status_code=403, detail="Not authorized to delete this product")
         
     crud_product.delete_product(db=db, product_id=id)
-    return {"detail": "Product deleted successfully"}
+    return {"detail": "Product moved to trash successfully"}
+
+@router.post("/{id}/restore")
+def restore_product(id: UUID, db: Session = Depends(get_db), current_seller: User = Depends(get_current_verified_seller)):
+    product = crud_product.get_product(db, product_id=id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if product.seller_id != current_seller.id:
+        raise HTTPException(status_code=403, detail="Not authorized to restore this product")
+        
+    success = crud_product.restore_product(db=db, product_id=id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to restore product")
+    return {"detail": "Product restored successfully"}

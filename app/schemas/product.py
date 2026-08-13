@@ -46,6 +46,7 @@ class ProductResponse(ProductBase):
     is_ai_verified: bool = False
     verification_hash: Optional[str] = None
     verified_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
     status: StatusEnum
 
     @model_validator(mode="before")
