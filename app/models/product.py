@@ -38,6 +38,7 @@ class Product(Base):
     is_ai_verified = Column(Boolean, default=False)
     verification_hash = Column(String, nullable=True)
     verified_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     tags = Column(ARRAY(String), default=[])
     status = Column(Enum(StatusEnum), default=StatusEnum.AVAILABLE, nullable=False)
 

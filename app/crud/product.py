@@ -16,11 +16,14 @@ def get_products(
     q: str = None,
     min_price: float = None,
     max_price: float = None,
-    sort_by: str = "newest"
+    sort_by: str = "newest",
+    include_deleted: bool = False
 ):
     from sqlalchemy import or_
     
     query = db.query(Product)
+    if not include_deleted:
+        query = query.filter(Product.deleted_at == None)
     
     # Text search
     if q:
@@ -99,22 +102,28 @@ def update_product(db: Session, product_id: UUID, product_update: ProductUpdate)
     db_product = get_product(db, product_id)
     if not db_product:
         return None
-    
-    update_data = product_update.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
+    for key, value in product_update.model_dump(exclude_unset=True).items():
         setattr(db_product, key, value)
-        
-    db.add(db_product)
     db.commit()
     db.refresh(db_product)
     return db_product
 
 def delete_product(db: Session, product_id: UUID):
+    from datetime import datetime, timezone
     db_product = get_product(db, product_id)
-    if db_product:
-        db.delete(db_product)
-        db.commit()
-    return db_product
+    if not db_product:
+        return False
+    db_product.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    return True
+
+def restore_product(db: Session, product_id: UUID):
+    db_product = db.query(Product).filter(Product.id == product_id).first()
+    if not db_product:
+        return False
+    db_product.deleted_at = None
+    db.commit()
+    return True
 
 def mark_product_verified(db: Session, product_id: UUID, verification_hash: str, similarity_score: float = None):
     """Mark a product as AI-verified with cryptographic proof."""
