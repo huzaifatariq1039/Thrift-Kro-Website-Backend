@@ -38,6 +38,22 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.on_event("startup")
 def startup_event():
+    # Auto-create all tables if they don't exist (essential for fresh deployments like Railway)
+    from app.core.database import engine, Base
+    # Import all models so they are registered with Base.metadata
+    import app.models.user  # noqa
+    import app.models.product  # noqa
+    import app.models.order  # noqa
+    import app.models.review  # noqa
+    import app.models.store  # noqa
+    import app.models.message  # noqa
+    import app.models.shopping  # noqa
+    import app.models.support  # noqa
+    import app.models.verification  # noqa
+    import app.models.seller_verification  # noqa
+    Base.metadata.create_all(bind=engine)
+    print("Database tables ensured.")
+
     db = SessionLocal()
     try:
         admin_email = "admin@thriftkro.pk"

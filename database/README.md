@@ -51,8 +51,8 @@ If you already have PostgreSQL installed natively on Windows:
    ```
 3. Ensure `.env` or `app/core/config.py` has your database URI:
    ```env
-   DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/thriftkro
-   ```
+   DATABASE_URL=postgresql://postgres:adminpassword@localhost:5432/thriftkro
+   ``
 
 ---
 

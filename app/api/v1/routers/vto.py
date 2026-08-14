@@ -22,7 +22,12 @@ _vton_client = None
 def get_vton_client():
     global _vton_client
     if _vton_client is None:
-        _vton_client = Client("huzaifa39/thriftkro-vton-engine", httpx_kwargs={"timeout": 120.0})
+        hf_token = os.getenv("HF_TOKEN")
+        _vton_client = Client(
+            "huzaifa39/thriftkro-vton-engine", 
+            hf_token=hf_token,
+            httpx_kwargs={"timeout": 120.0}
+        )
     return _vton_client
 
 
