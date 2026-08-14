@@ -45,7 +45,6 @@ def startup_event():
     import app.models.product  # noqa
     import app.models.order  # noqa
     import app.models.review  # noqa
-    import app.models.store  # noqa
     import app.models.message  # noqa
     import app.models.shopping  # noqa
     import app.models.support  # noqa
