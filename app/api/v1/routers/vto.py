@@ -25,7 +25,7 @@ def get_vton_client():
         hf_token = os.getenv("HF_TOKEN")
         _vton_client = Client(
             "huzaifa39/thriftkro-vton-engine", 
-            hf_token=hf_token,
+            token=hf_token,
             httpx_kwargs={"timeout": 120.0}
         )
     return _vton_client
