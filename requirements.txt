@@ -18,3 +18,4 @@ open-clip-torch
 Pillow
 numpy
 gradio_client
+cloudinary
