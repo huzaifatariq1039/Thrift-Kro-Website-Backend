@@ -65,17 +65,33 @@ def google_auth(body: GoogleAuthRequest, db: Session = Depends(get_db)):
             detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID environment variable.",
         )
     
-    try:
-        idinfo = id_token.verify_oauth2_token(
-            body.id_token,
-            google_requests.Request(),
-            settings.GOOGLE_CLIENT_ID,
+    import requests
+    
+    # Check if token is a JWT (id_token) or an access_token
+    if body.id_token.count(".") == 2:
+        try:
+            idinfo = id_token.verify_oauth2_token(
+                body.id_token,
+                google_requests.Request(),
+                settings.GOOGLE_CLIENT_ID,
+            )
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Google ID token.",
+            )
+    else:
+        # It's an access_token
+        resp = requests.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {body.id_token}"}
         )
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Google ID token.",
-        )
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Google access token.",
+            )
+        idinfo = resp.json()
     
     # Extract user info from the verified token
     google_id = idinfo["sub"]

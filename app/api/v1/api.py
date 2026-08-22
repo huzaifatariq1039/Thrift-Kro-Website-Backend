@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.routers import auth, users, products, orders, wallet, vto, chat, reviews, ai, stores, sellers, shopping, support, admin
+from app.api.v1.routers import auth, users, products, orders, wallet, vto, chat, reviews, ai, stores, sellers, shopping, support, admin, upload
 
 api_router = APIRouter()
 
@@ -17,3 +17,5 @@ api_router.include_router(sellers.router, prefix="/sellers", tags=["sellers"])
 api_router.include_router(shopping.router, prefix="/shopping", tags=["shopping"])
 api_router.include_router(support.router, prefix="/support", tags=["support"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(upload.router, prefix="/upload", tags=["upload"])
+

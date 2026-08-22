@@ -9,8 +9,15 @@ class UserBase(BaseModel):
     full_name: str
     role: RoleEnum = RoleEnum.BUYER
 
+from pydantic import BaseModel, EmailStr, Field
+
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(
+        ...,
+        min_length=8,
+        pattern=r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$",
+        description="Password must contain at least 8 characters, one uppercase, one lowercase, one number and one special character"
+    )
 
 class UserLogin(BaseModel):
     email: EmailStr
