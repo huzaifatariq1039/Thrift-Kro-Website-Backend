@@ -1,23 +1,23 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
 from app.models.user import RoleEnum, VerificationStatusEnum, BusinessTypeEnum
+import re
 
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str
     role: RoleEnum = RoleEnum.BUYER
 
-from pydantic import BaseModel, EmailStr, Field
-
 class UserCreate(UserBase):
-    password: str = Field(
-        ...,
-        min_length=8,
-        pattern=r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$",
-        description="Password must contain at least 8 characters, one uppercase, one lowercase, one number and one special character"
-    )
+    password: str = Field(..., min_length=8, description="Password must contain at least 8 characters, one uppercase, one lowercase, one number and one special character")
+
+    @field_validator("password")
+    def validate_password(cls, v):
+        if not re.match(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$", v):
+            raise ValueError("Password must contain at least 8 characters, one uppercase, one lowercase, one number and one special character")
+        return v
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -38,15 +38,14 @@ class SellerProfileResponse(BaseModel):
     id: UUID
     shop_name: str
     description: Optional[str] = None
-    phone_number: Optional[str] = None
-    address: Optional[str] = None
-    city: Optional[str] = None
+    logo_url: Optional[str] = None
     business_type: Optional[BusinessTypeEnum] = None
     is_verified: bool = False
     verification_status: VerificationStatusEnum = VerificationStatusEnum.UNVERIFIED
     verified_at: Optional[datetime] = None
     rating: float = 0.0
     review_count: int = 0
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

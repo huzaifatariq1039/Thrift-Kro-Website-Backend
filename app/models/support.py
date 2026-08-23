@@ -25,8 +25,8 @@ class SupportTicket(Base):
     __tablename__ = "support_tickets"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    seller_order_id = Column(UUID(as_uuid=True), ForeignKey("seller_orders.id", ondelete="SET NULL"), nullable=True)
     
     type = Column(Enum(TicketTypeEnum), nullable=False)
     subject = Column(String, nullable=False)
@@ -39,4 +39,4 @@ class SupportTicket(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User")
-    order = relationship("Order")
+    seller_order = relationship("SellerOrder")

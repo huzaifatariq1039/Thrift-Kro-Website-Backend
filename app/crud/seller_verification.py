@@ -110,9 +110,6 @@ def create_verification_request(
         cnic_number=data.get("cnic_number"),
         cnic_front_url=data["cnic_front_url"],
         cnic_back_url=data["cnic_back_url"],
-        shop_photo_urls=data.get("shop_photo_urls", []),
-        products_proof=data.get("products_proof", []),
-        ai_verified=data.get("ai_verified", False),
         business_reg_url=data.get("business_reg_url"),
         status=VerificationStatusEnum.PENDING,
     )
@@ -164,28 +161,6 @@ def review_verification_request(
             profile.is_verified = True
             profile.verification_status = VerificationStatusEnum.APPROVED
             profile.verified_at = now
-            
-            # Create products from proof
-            if request.products_proof:
-                for prod_data in request.products_proof:
-                    new_prod = Product(
-                        seller_id=profile.user_id,
-                        name=prod_data.get("name", "Product"),
-                        description=prod_data.get("description", ""),
-                        price=float(prod_data.get("price", 0)),
-                        original_price=float(prod_data.get("price", 0)) * 1.4,
-                        image_url=prod_data.get("images", [""])[0] if prod_data.get("images") else "https://placeholder.thriftkro.pk/prod.jpg",
-                        images=prod_data.get("images", []),
-                        category=prod_data.get("category", "All"),
-                        department="Unisex",
-                        size=prod_data.get("sizes", "M"),
-                        brand="Thrift",
-                        condition=ConditionEnum.EXCELLENT,
-                        is_ai_verified=True,
-                        verified_at=now
-                    )
-                    db.add(new_prod)
-                    
         elif status == VerificationStatusEnum.REJECTED:
             profile.is_verified = False
             profile.verification_status = VerificationStatusEnum.REJECTED

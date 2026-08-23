@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from app.models.review import Review
-from app.models.order import Order, OrderStatusEnum
+from app.models.order import CheckoutOrder, SellerOrder, OrderStatusEnum
 from app.models.user import User, SellerProfile
 from app.models.product import Product
 from app.schemas.review import ReviewCreate
