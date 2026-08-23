@@ -58,6 +58,15 @@ def get_current_verified_seller(current_user: User = Depends(get_current_seller)
         )
     return current_user
 
+def get_current_buyer(current_user: User = Depends(get_current_active_user)) -> User:
+    """Only BUYER users can access buyer-specific endpoints like checkout."""
+    if current_user.role != RoleEnum.BUYER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Buyer access required.",
+        )
+    return current_user
+
 def get_current_admin(current_user: User = Depends(get_current_active_user)) -> User:
     """Only ADMIN users can access admin endpoints."""
     if current_user.role != RoleEnum.ADMIN:

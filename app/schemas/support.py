@@ -9,7 +9,7 @@ class TicketCreate(BaseModel):
     type: TicketTypeEnum
     subject: str
     description: str
-    order_id: Optional[UUID] = None
+    seller_order_id: Optional[UUID] = None
 
 
 class TicketUpdate(BaseModel):
@@ -20,7 +20,7 @@ class TicketUpdate(BaseModel):
 class TicketResponse(BaseModel):
     id: UUID
     user_id: UUID
-    order_id: Optional[UUID] = None
+    seller_order_id: Optional[UUID] = None
     type: TicketTypeEnum
     subject: str
     description: str

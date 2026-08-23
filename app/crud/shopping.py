@@ -7,7 +7,7 @@ from uuid import UUID
 from typing import List, Optional, Tuple
 
 from app.models.shopping import CartItem, WishlistItem
-from app.models.product import Product, StatusEnum
+from app.models.product import Product, ProductStatusEnum
 
 
 # --- Shopping Cart ---
@@ -22,7 +22,7 @@ def add_to_cart(db: Session, user_id: UUID, product_id: UUID) -> Tuple[Optional[
     if not product:
         return None, "Product not found"
     
-    if product.status != StatusEnum.AVAILABLE:
+    if product.status != ProductStatusEnum.AVAILABLE:
         return None, f"Product is currently {product.status.value}"
     
     if product.seller_id == user_id:
@@ -33,7 +33,7 @@ def add_to_cart(db: Session, user_id: UUID, product_id: UUID) -> Tuple[Optional[
     db.add(cart_item)
     
     # 3. Update product status
-    product.status = StatusEnum.IN_CART
+    product.status = ProductStatusEnum.IN_CART
     
     try:
         db.commit()
@@ -58,8 +58,8 @@ def remove_from_cart(db: Session, user_id: UUID, product_id: UUID) -> bool:
         return False
         
     product = db.query(Product).filter(Product.id == product_id).first()
-    if product and product.status == StatusEnum.IN_CART:
-        product.status = StatusEnum.AVAILABLE
+    if product and product.status == ProductStatusEnum.IN_CART:
+        product.status = ProductStatusEnum.AVAILABLE
         
     db.delete(cart_item)
     db.commit()
@@ -71,8 +71,8 @@ def clear_cart(db: Session, user_id: UUID):
     items = db.query(CartItem).filter(CartItem.user_id == user_id).all()
     for item in items:
         product = db.query(Product).filter(Product.id == item.product_id).first()
-        if product and product.status == StatusEnum.IN_CART:
-            product.status = StatusEnum.AVAILABLE
+        if product and product.status == ProductStatusEnum.IN_CART:
+            product.status = ProductStatusEnum.AVAILABLE
         db.delete(item)
     db.commit()
 

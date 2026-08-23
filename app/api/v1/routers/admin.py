@@ -13,7 +13,7 @@ from app.schemas.order import OrderResponse
 from app.api.deps import get_db, get_current_admin
 import app.crud.admin as crud_admin
 import app.crud.support as crud_support
-from app.models.order import Order
+from app.models.order import CheckoutOrder, SellerOrder
 
 router = APIRouter()
 
@@ -39,7 +39,7 @@ def get_all_orders(
     Get all orders on the platform for Escrow management.
     Only accessible by ADMIN.
     """
-    return db.query(Order).order_by(Order.created_at.desc()).all()
+    return db.query(CheckoutOrder).order_by(CheckoutOrder.created_at.desc()).all()
 
 
 @router.get("/tickets", response_model=List[TicketResponse])

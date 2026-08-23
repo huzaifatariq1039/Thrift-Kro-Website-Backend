@@ -2,7 +2,7 @@ from pydantic import BaseModel, model_validator
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
-from app.models.product import ConditionEnum, StatusEnum
+from app.models.product import ConditionEnum, ProductStatusEnum
 
 class ProductBase(BaseModel):
     name: str
@@ -33,7 +33,7 @@ class ProductUpdate(BaseModel):
     brand: Optional[str] = None
     condition: Optional[ConditionEnum] = None
     tags: Optional[List[str]] = None
-    status: Optional[StatusEnum] = None
+    status: Optional[ProductStatusEnum] = None
     image_url: Optional[str] = None
     images: Optional[List[str]] = None
 
@@ -47,7 +47,7 @@ class ProductResponse(ProductBase):
     verification_hash: Optional[str] = None
     verified_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
-    status: StatusEnum
+    status: ProductStatusEnum
 
     @model_validator(mode="before")
     def set_seller_name(cls, data):

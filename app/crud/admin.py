@@ -1,8 +1,10 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.models.user import User, RoleEnum, SellerProfile
-from app.models.product import Product, StatusEnum
-from app.models.order import Order, OrderStatusEnum
+from app.models.user import User, SellerProfile, VerificationStatusEnum, Wallet, Transaction, RoleEnum
+from app.models.product import Product, ProductStatusEnum
+from app.models.support import SupportTicket, TicketStatusEnum
+from app.models.order import CheckoutOrder, SellerOrder, OrderStatusEnum
+from app.models.verification import VerificationLog
 from app.schemas.admin import AdminStatsResponse
 
 
@@ -17,8 +19,8 @@ def get_platform_stats(db: Session) -> AdminStatsResponse:
     total_sold_products = db.query(func.count(Product.id)).filter(Product.status == StatusEnum.SOLD).scalar() or 0
 
     # Orders Stats
-    total_completed_orders = db.query(func.count(Order.id)).filter(Order.status == OrderStatusEnum.COMPLETED_PAYOUT).scalar() or 0
-    total_pending_orders = db.query(func.count(Order.id)).filter(Order.status != OrderStatusEnum.COMPLETED_PAYOUT).scalar() or 0
+    total_completed_orders = db.query(func.count(SellerOrder.id)).filter(SellerOrder.status == OrderStatusEnum.COMPLETED_PAYOUT).scalar() or 0
+    total_pending_orders = db.query(func.count(SellerOrder.id)).filter(SellerOrder.status != OrderStatusEnum.COMPLETED_PAYOUT).scalar() or 0
 
     # Revenue Stats (Sum of escrow fees on non-failed orders)
     # Exclude PENDING, and DISPUTED to be safe. We only count revenue from ESCROW, SHIPPED, DELIVERED, and COMPLETED
@@ -29,8 +31,8 @@ def get_platform_stats(db: Session) -> AdminStatsResponse:
         OrderStatusEnum.COMPLETED_PAYOUT
     ]
     
-    total_platform_revenue = db.query(func.sum(Order.escrow_fee)).filter(Order.status.in_(valid_revenue_statuses)).scalar() or 0.0
-    total_gmv = db.query(func.sum(Order.total_amount)).filter(Order.status.in_(valid_revenue_statuses)).scalar() or 0.0
+    total_platform_revenue = db.query(func.sum(SellerOrder.platform_fee)).filter(SellerOrder.status.in_(valid_revenue_statuses)).scalar() or 0.0
+    total_gmv = db.query(func.sum(CheckoutOrder.total_amount)).filter(CheckoutOrder.status.in_(valid_revenue_statuses)).scalar() or 0.0
 
     return AdminStatsResponse(
         users={

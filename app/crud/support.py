@@ -12,7 +12,7 @@ def create_ticket(db: Session, user_id: UUID, ticket: TicketCreate) -> SupportTi
         type=ticket.type,
         subject=ticket.subject,
         description=ticket.description,
-        order_id=ticket.order_id
+        seller_order_id=ticket.seller_order_id
     )
     db.add(db_ticket)
     db.commit()

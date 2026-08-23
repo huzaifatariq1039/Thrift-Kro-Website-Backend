@@ -36,15 +36,9 @@ class SellerVerificationResponse(BaseModel):
     seller_profile_id: UUID
     business_name: str
     business_type: BusinessTypeEnum
-    phone_number: str
-    address: str
-    city: str
     cnic_number: Optional[str] = None
     cnic_front_url: str
     cnic_back_url: str
-    shop_photo_urls: List[str] = []
-    products_proof: List[VerificationProductSchema] = []
-    ai_verified: bool = False
     business_reg_url: Optional[str] = None
     status: VerificationStatusEnum
     rejection_reason: Optional[str] = None
