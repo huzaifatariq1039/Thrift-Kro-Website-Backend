@@ -36,6 +36,9 @@ class SellerVerificationResponse(BaseModel):
     seller_profile_id: UUID
     business_name: str
     business_type: BusinessTypeEnum
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
     cnic_number: Optional[str] = None
     cnic_front_url: str
     cnic_back_url: str

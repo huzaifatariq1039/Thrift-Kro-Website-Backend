@@ -16,6 +16,9 @@ class SellerVerificationRequest(Base):
     # Business information snapshot
     business_name = Column(String, nullable=False)
     business_type = Column(Enum(BusinessTypeEnum), nullable=False)
+    phone_number = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    city = Column(String, nullable=True)
     cnic_number = Column(String, nullable=True)
     
     # Proof document URLs
