@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime, Enum
+from sqlalchemy import Column, String, ForeignKey, DateTime, Enum, JSON, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -25,6 +25,9 @@ class SellerVerificationRequest(Base):
     cnic_front_url = Column(String, nullable=False)
     cnic_back_url = Column(String, nullable=False)
     business_reg_url = Column(String, nullable=True)
+    shop_photo_urls = Column(JSON, default=[])
+    products_proof = Column(JSON, default=[])
+    ai_verified = Column(Boolean, default=False)
     
     # Review
     status = Column(Enum(VerificationStatusEnum), default=VerificationStatusEnum.PENDING, nullable=False)

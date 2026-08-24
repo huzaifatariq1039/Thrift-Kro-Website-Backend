@@ -43,6 +43,9 @@ class SellerVerificationResponse(BaseModel):
     cnic_front_url: str
     cnic_back_url: str
     business_reg_url: Optional[str] = None
+    shop_photo_urls: List[str] = []
+    products_proof: List[VerificationProductSchema] = []
+    ai_verified: bool = False
     status: VerificationStatusEnum
     rejection_reason: Optional[str] = None
     created_at: datetime
