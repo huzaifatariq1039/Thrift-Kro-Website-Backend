@@ -111,6 +111,9 @@ def create_verification_request(
         cnic_front_url=data["cnic_front_url"],
         cnic_back_url=data["cnic_back_url"],
         business_reg_url=data.get("business_reg_url"),
+        shop_photo_urls=data.get("shop_photo_urls", []),
+        products_proof=data.get("products_proof", []),
+        ai_verified=data.get("ai_verified", False),
         status=VerificationStatusEnum.PENDING,
     )
     db.add(request)
