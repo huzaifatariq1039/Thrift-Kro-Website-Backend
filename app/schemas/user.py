@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 from datetime import datetime
 from app.models.user import RoleEnum, VerificationStatusEnum, BusinessTypeEnum
@@ -19,13 +19,18 @@ class UserCreate(UserBase):
             raise ValueError("Password must contain at least 8 characters, one uppercase, one lowercase, one number and one special character")
         return v
 
+class PublicUserCreate(UserCreate):
+    """Registration payload for untrusted, public callers."""
+
+    role: Literal[RoleEnum.BUYER, RoleEnum.SELLER] = RoleEnum.BUYER
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
 class GoogleAuthRequest(BaseModel):
     id_token: str
-    role: RoleEnum = RoleEnum.BUYER
+    role: Literal[RoleEnum.BUYER, RoleEnum.SELLER] = RoleEnum.BUYER
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None

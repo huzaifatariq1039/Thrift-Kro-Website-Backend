@@ -7,14 +7,14 @@ from google.auth.transport import requests as google_requests
 from app.core.database import SessionLocal
 from app.core.config import settings
 from app.core.security import create_access_token, verify_password
-from app.schemas.user import UserCreate, UserResponse, Token, GoogleAuthRequest
+from app.schemas.user import PublicUserCreate, UserResponse, Token, GoogleAuthRequest
 import app.crud.user as crud_user
 from app.api.deps import get_db
 
 router = APIRouter()
 
 @router.post("/register", response_model=UserResponse)
-def register(user: UserCreate, db: Session = Depends(get_db)):
+def register(user: PublicUserCreate, db: Session = Depends(get_db)):
     db_user = crud_user.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
