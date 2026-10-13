@@ -16,8 +16,10 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 from PIL import Image
+from requests import RequestException
 
 from app.core.config import settings
+from app.services.media_fetch import UnsafeMediaUrl, load_platform_image
 
 logger = logging.getLogger(__name__)
 
@@ -339,14 +341,11 @@ def decode_base64_frame(base64_str: str) -> Tuple[np.ndarray, Image.Image]:
 
 
 def load_image_from_url(url: str) -> Optional[Image.Image]:
-    """Download an image from a URL and return as PIL Image."""
+    """Load a bounded image from platform-controlled storage only."""
     try:
-        import requests
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        return Image.open(io.BytesIO(response.content)).convert("RGB")
-    except Exception as e:
-        logger.warning(f"Failed to load image from {url}: {e}")
+        return load_platform_image(url)
+    except (UnsafeMediaUrl, RequestException) as exc:
+        logger.warning("Reference image fetch rejected or failed: %s", exc)
         return None
 
 
