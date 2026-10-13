@@ -1,7 +1,10 @@
+import os
 import unittest
 
 from fastapi import FastAPI
 from pydantic import ValidationError
+
+os.environ.setdefault("SECRET_KEY", "test-only-secret-key-with-at-least-32-characters")
 
 from app.api.v1.routers.auth import router as auth_router
 from app.models.user import RoleEnum

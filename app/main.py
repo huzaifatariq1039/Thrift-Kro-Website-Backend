@@ -3,9 +3,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.api import api_router
-from app.core.database import SessionLocal
-import app.crud.user as crud_user
-from app.schemas.user import UserCreate
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -35,38 +32,6 @@ else:
     )
 
 app.include_router(api_router, prefix="/api/v1")
-
-@app.on_event("startup")
-def startup_event():
-    # Auto-create all tables if they don't exist (essential for fresh deployments like Railway)
-    from app.core.database import engine, Base
-    # Import all models so they are registered with Base.metadata
-    import app.models.user  # noqa
-    import app.models.product  # noqa
-    import app.models.order  # noqa
-    import app.models.review  # noqa
-    import app.models.message  # noqa
-    import app.models.shopping  # noqa
-    import app.models.support  # noqa
-    import app.models.verification  # noqa
-    import app.models.seller_verification  # noqa
-    Base.metadata.create_all(bind=engine)
-    print("Database tables ensured.")
-
-    db = SessionLocal()
-    try:
-        admin_email = "admin@thriftkro.pk"
-        admin = crud_user.get_user_by_email(db, email=admin_email)
-        if not admin:
-            crud_user.create_user(db, UserCreate(
-                email=admin_email,
-                full_name="System Admin",
-                password="Admin@123",
-                role="ADMIN"
-            ))
-            print("Admin user provisioned successfully.")
-    finally:
-        db.close()
 
 
 @app.get("/")
