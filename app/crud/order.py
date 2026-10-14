@@ -412,9 +412,19 @@ def update_order_status(
     Returns the updated SellerOrder or an error message.
     """
     try:
-        seller_order = db.query(SellerOrder).filter(SellerOrder.id == seller_order_id).first()
+        seller_order = (
+            db.query(SellerOrder)
+            .options(joinedload(SellerOrder.checkout_order))
+            .filter(SellerOrder.id == seller_order_id)
+            .with_for_update(of=SellerOrder)
+            .first()
+        )
         if not seller_order:
             return "Order not found"
+
+        # Treat retried commands as success without repeating history or money/stock changes.
+        if seller_order.status == new_status:
+            return get_seller_order(db, seller_order_id)
 
         # Validate state transition
         allowed = VALID_TRANSITIONS.get(seller_order.status, [])
@@ -425,6 +435,71 @@ def update_order_status(
             )
 
         now = datetime.now(timezone.utc)
+
+        if new_status in (OrderStatusEnum.CANCELLED, OrderStatusEnum.REFUNDED):
+            order_items = (
+                db.query(OrderItem)
+                .filter(OrderItem.seller_order_id == seller_order.id)
+                .order_by(OrderItem.id)
+                .all()
+            )
+            quantities_to_restore = defaultdict(int)
+            for order_item in order_items:
+                quantities_to_restore[order_item.product_variant_id] += order_item.quantity
+
+            variant_ids = sorted(quantities_to_restore, key=str)
+            variants = []
+            if variant_ids:
+                variants = (
+                    db.query(ProductVariant)
+                    .filter(ProductVariant.id.in_(variant_ids))
+                    .order_by(ProductVariant.id)
+                    .with_for_update(of=ProductVariant)
+                    .all()
+                )
+                if len(variants) != len(variant_ids):
+                    return "Cannot compensate order because an inventory record is missing"
+
+            buyer_wallet = None
+            checkout = seller_order.checkout_order
+            if checkout.payment_method == PaymentMethodEnum.WALLET:
+                existing_refund = (
+                    db.query(Transaction)
+                    .filter(
+                        Transaction.reference_type == "seller_order",
+                        Transaction.reference_id == seller_order.id,
+                        Transaction.type == TransactionTypeEnum.REFUND,
+                    )
+                    .first()
+                )
+                if existing_refund:
+                    return "A refund is already recorded for this order"
+
+                buyer_wallet = (
+                    db.query(Wallet)
+                    .filter(Wallet.user_id == checkout.buyer_id)
+                    .with_for_update()
+                    .first()
+                )
+                if not buyer_wallet:
+                    return "Buyer wallet not found; compensation was not applied"
+
+            variants_by_id = {variant.id: variant for variant in variants}
+            for variant_id, quantity in quantities_to_restore.items():
+                variants_by_id[variant_id].quantity_in_stock += quantity
+
+            if buyer_wallet is not None:
+                refund_amount = round(seller_order.total_amount, 2)
+                buyer_wallet.balance = round(buyer_wallet.balance + refund_amount, 2)
+                db.add(Transaction(
+                    wallet_id=buyer_wallet.id,
+                    type=TransactionTypeEnum.REFUND,
+                    amount=refund_amount,
+                    reference_id=seller_order.id,
+                    reference_type="seller_order",
+                    status="COMPLETED",
+                    description=f"Refund for seller order {seller_order.id}",
+                ))
 
         # Apply status-specific logic
         seller_order.status = new_status
