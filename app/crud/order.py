@@ -245,6 +245,8 @@ def create_order_from_cart(
             variant = variants_by_id.get(cart_item.product_variant_id)
             if not variant or not variant.product:
                 return "A cart item is no longer available"
+            if not variant.is_active:
+                return "A cart item references an archived product variant"
             product = variant.product
             if product.deleted_at is not None:
                 return f"Product '{product.name}' is no longer available"

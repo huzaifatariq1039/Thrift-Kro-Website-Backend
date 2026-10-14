@@ -21,7 +21,7 @@ class CartItem(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     cart_session_id = Column(UUID(as_uuid=True), ForeignKey("cart_sessions.id", ondelete="CASCADE"), nullable=False)
-    product_variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id", ondelete="CASCADE"), nullable=False)
+    product_variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id", ondelete="RESTRICT"), nullable=False)
     quantity = Column(Integer, default=1, nullable=False)
     added_at = Column(DateTime(timezone=True), server_default=func.now())
 

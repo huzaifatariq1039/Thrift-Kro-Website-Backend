@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from app.models.product import Product
 from app.schemas.product import ProductCreate, ProductUpdate
+from app.services.product_variants import reconcile_product_variants
 from uuid import UUID
 
 def get_product(db: Session, product_id: UUID):
@@ -102,7 +103,11 @@ def update_product(db: Session, product_id: UUID, product_update: ProductUpdate)
     db_product = get_product(db, product_id)
     if not db_product:
         return None
-    for key, value in product_update.model_dump(exclude_unset=True).items():
+    update_data = product_update.model_dump(exclude_unset=True)
+    variants_data = update_data.pop("variants", None)
+    if variants_data is not None:
+        reconcile_product_variants(db, product_id, variants_data)
+    for key, value in update_data.items():
         setattr(db_product, key, value)
     db.commit()
     db.refresh(db_product)

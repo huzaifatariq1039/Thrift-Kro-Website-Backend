@@ -44,6 +44,8 @@ def add_to_cart(
         )
         if not variant:
             return None, "Product variant not found"
+        if not variant.is_active:
+            return None, "Product variant is no longer available"
 
         product = variant.product
         if not product or product.deleted_at is not None:

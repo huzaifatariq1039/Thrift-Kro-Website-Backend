@@ -93,7 +93,12 @@ class Product(Base):
 
     seller = relationship("User", back_populates="products")
     category = relationship("Category", back_populates="products")
-    variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan")
+    variants = relationship(
+        "ProductVariant",
+        primaryjoin="and_(Product.id == ProductVariant.product_id, ProductVariant.is_active.is_(True))",
+        back_populates="product",
+        cascade="save-update, merge",
+    )
     images = relationship("ProductImage", back_populates="product", cascade="all, delete-orphan")
     tags = relationship("ProductTag", back_populates="product", cascade="all, delete-orphan")
     verification_logs = relationship("VerificationLog", back_populates="product", cascade="all, delete-orphan")
@@ -118,6 +123,8 @@ class ProductVariant(Base):
         nullable=False,
     )
     quantity_in_stock = Column(Integer, default=1, nullable=False)
+    is_active = Column(Boolean, default=True, server_default="true", nullable=False)
+    archived_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
