@@ -1,7 +1,7 @@
 """
 Order schemas — aligned with the multi-vendor CheckoutOrder → SellerOrder → OrderItem model.
 """
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -42,6 +42,8 @@ class OrderItemSchema(BaseModel):
 
 
 class SellerOrderSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
     id: UUID
     seller_id: UUID
     seller_name: Optional[str] = None
@@ -55,10 +57,10 @@ class SellerOrderSchema(BaseModel):
     shipped_at: Optional[datetime] = None
     delivered_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
-    items: List[OrderItemSchema] = []
-
-    class Config:
-        from_attributes = True
+    items: List[OrderItemSchema] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("items", "order_items"),
+    )
 
 
 class OrderResponse(BaseModel):
@@ -69,7 +71,7 @@ class OrderResponse(BaseModel):
     shipping_address_id: Optional[UUID] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    seller_orders: List[SellerOrderSchema] = []
+    seller_orders: List[SellerOrderSchema] = Field(default_factory=list)
 
     # Computed aggregate status
     overall_status: Optional[str] = None
