@@ -1,128 +1,162 @@
 """
 Shopping Cart and Wishlist Router.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 
 from app.models.user import User
-from app.models.order import PaymentMethodEnum
-from app.schemas.shopping import CartSummary, WishlistSummary, CartCheckoutRequest
-from app.api.deps import get_db, get_current_active_user
+from app.schemas.shopping import (
+    CartSummary, CartItemResponse,
+    WishlistSummary, WishlistItemResponse,
+    AddToCartRequest, UpdateCartItemRequest, CartCheckoutRequest,
+)
+from app.api.deps import get_db, get_current_active_user, get_current_buyer
 import app.crud.shopping as crud_shopping
-import app.crud.order as crud_order
 
 router = APIRouter()
 
 
-# --- Shopping Cart ---
+# ─── Shopping Cart ────────────────────────────────────────────────────
 
 @router.get("/cart", response_model=CartSummary)
 def get_cart(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """Get the current user's shopping cart."""
+    """Get the current user's shopping cart with all item details."""
     items = crud_shopping.get_user_cart(db, current_user.id)
-    total_price = sum(item.product.price for item in items if item.product)
-    
+
+    cart_items = [CartItemResponse.from_cart_item(item) for item in items]
+    total_price = sum(ci.line_total for ci in cart_items)
+
     return CartSummary(
-        items=items,
+        items=cart_items,
         total_price=total_price,
-        total_items=len(items)
+        total_items=len(cart_items),
     )
 
 
-@router.post("/cart/add/{product_id}")
-def add_to_cart(product_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """Add a product to the cart. Marks the product as IN_CART."""
-    item, error = crud_shopping.add_to_cart(db, current_user.id, product_id)
+@router.post("/cart/add")
+def add_to_cart(
+    payload: AddToCartRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Add a product variant to the cart."""
+    item, error = crud_shopping.add_to_cart(
+        db, current_user.id, payload.product_variant_id, payload.quantity
+    )
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
     return {"detail": "Product added to cart successfully"}
 
 
-@router.delete("/cart/remove/{product_id}")
-def remove_from_cart(product_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """Remove a product from the cart. Marks the product as AVAILABLE."""
-    removed = crud_shopping.remove_from_cart(db, current_user.id, product_id)
+@router.delete("/cart/remove/{cart_item_id}")
+def remove_from_cart(
+    cart_item_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Remove a specific item from the cart by its cart_item_id."""
+    removed = crud_shopping.remove_from_cart(db, current_user.id, cart_item_id)
     if not removed:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found in your cart")
-    return {"detail": "Product removed from cart"}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found in your cart")
+    return {"detail": "Item removed from cart"}
+
+
+@router.put("/cart/item/{cart_item_id}")
+def update_cart_item(
+    cart_item_id: UUID,
+    payload: UpdateCartItemRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Update the quantity of a cart item. Set to 0 to remove."""
+    item, error = crud_shopping.update_cart_item_quantity(
+        db, current_user.id, cart_item_id, payload.quantity
+    )
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    if item is None and error is None:
+        return {"detail": "Item removed from cart (quantity set to 0)"}
+    return {"detail": "Cart item updated"}
+
+
+@router.delete("/cart/clear")
+def clear_cart(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """Clear all items from the cart."""
+    crud_shopping.clear_cart(db, current_user.id)
+    return {"detail": "Cart cleared"}
 
 
 @router.post("/cart/checkout")
-def checkout_cart(payload: CartCheckoutRequest = CartCheckoutRequest(), db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def checkout_cart(
+    payload: CartCheckoutRequest,
+    idempotency_key: str = Header(
+        ...,
+        alias="Idempotency-Key",
+        min_length=16,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_buyer),
+):
     """
     Checkout the entire cart.
-    Since this is a C2C platform, this converts each CartItem into a separate Order.
-    Requires sufficient wallet balance for the total cart amount.
+    Groups items by seller and creates a CheckoutOrder with SellerOrders.
+    Delegates to the order CRUD for atomic order creation.
     """
-    items = crud_shopping.get_user_cart(db, current_user.id)
-    if not items:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Your cart is empty")
-        
-    total_cart_price = sum(item.product.price for item in items if item.product)
-    
-    # Calculate total with fees (assuming flat shipping fee + standard escrow fee per item)
-    total_amount_needed = 0.0
-    for item in items:
-        if not item.product:
-            continue
-        price = item.product.price
-        escrow_fee = price * 0.05
-        shipping_fee = 200.0  # standard shipping fee in this app
-        total_amount_needed += (price + escrow_fee + shipping_fee)
-        
-    if current_user.wallet and current_user.wallet.balance < total_amount_needed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail=f"Insufficient funds. Your balance is {current_user.wallet.balance}, but you need {total_amount_needed}."
-        )
-        
-    created_orders = []
-    from app.schemas.order import OrderCreate
-    
-    shipping_addr = payload.shipping_address or "Saved User Address"
+    import app.crud.order as crud_order
+    from app.models.order import PaymentMethodEnum
 
-    # Process each item
-    for item in items:
-        if not item.product:
-            continue
-            
-        order_create = OrderCreate(
-            product_id=item.product.id,
-            shipping_address=shipping_addr,
-            payment_method=PaymentMethodEnum.WALLET
+    # Parse payment method
+    try:
+        payment_method = PaymentMethodEnum(payload.payment_method)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid payment method. Must be one of: {[e.value for e in PaymentMethodEnum]}"
         )
-        
-        # This will deduct from wallet and mark product as SOLD
-        db_order = crud_order.create_order(db=db, order=order_create, buyer_id=current_user.id)
-        if db_order and db_order != "INSUFFICIENT_FUNDS":
-            created_orders.append(db_order.id)
-            
-    # Clear the cart (items successfully ordered are now SOLD, so we just remove cart records)
-    for item in items:
-        db.delete(item)
-    db.commit()
-    
+
+    # Delegate to order CRUD
+    result = crud_order.create_order_from_cart(
+        db=db,
+        buyer_id=current_user.id,
+        shipping_address_id=payload.shipping_address_id,
+        payment_method=payment_method,
+        idempotency_key=idempotency_key,
+    )
+
+    if isinstance(result, str):
+        # Error message returned
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result)
+
     return {
-        "detail": f"Successfully checked out {len(created_orders)} items",
-        "order_ids": created_orders
+        "detail": f"Order placed successfully",
+        "order_id": str(result.id),
+        "total_amount": result.total_amount,
+        "seller_orders_count": len(result.seller_orders),
     }
 
 
-# --- Wishlist ---
+# ─── Wishlist ─────────────────────────────────────────────────────────
 
 @router.get("/wishlist", response_model=WishlistSummary)
 def get_wishlist(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Get the current user's wishlist."""
     items = crud_shopping.get_user_wishlist(db, current_user.id)
+    wishlist_items = [WishlistItemResponse.from_wishlist_item(item) for item in items]
     return WishlistSummary(
-        items=items,
-        total_items=len(items)
+        items=wishlist_items,
+        total_items=len(wishlist_items),
     )
 
 
 @router.post("/wishlist/toggle/{product_id}")
-def toggle_wishlist(product_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def toggle_wishlist(
+    product_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
     """Toggle a product in the wishlist (adds if missing, removes if present)."""
     added, message = crud_shopping.toggle_wishlist(db, current_user.id, product_id)
     return {"detail": message, "is_in_wishlist": added}

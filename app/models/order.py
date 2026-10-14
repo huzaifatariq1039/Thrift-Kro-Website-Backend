@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Float, ForeignKey, Enum, Integer, DateTime, Text
+from sqlalchemy import Column, String, Float, ForeignKey, Enum, Integer, DateTime, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -24,6 +24,13 @@ class OrderStatusEnum(str, enum.Enum):
 
 class CheckoutOrder(Base):
     __tablename__ = "checkout_orders"
+    __table_args__ = (
+        UniqueConstraint(
+            "buyer_id",
+            "idempotency_key",
+            name="uq_checkout_orders_buyer_idempotency_key",
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     buyer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
@@ -31,6 +38,7 @@ class CheckoutOrder(Base):
     payment_method = Column(Enum(PaymentMethodEnum), nullable=False)
     shipping_address_id = Column(UUID(as_uuid=True), ForeignKey("user_addresses.id", ondelete="SET NULL"), nullable=True)
     billing_address_id = Column(UUID(as_uuid=True), ForeignKey("user_addresses.id", ondelete="SET NULL"), nullable=True)
+    idempotency_key = Column(String(128), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
