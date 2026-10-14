@@ -474,16 +474,19 @@ def release_escrow(db: Session, seller_order_id: UUID, actor_id: UUID) -> Union[
             db.query(SellerOrder)
             .options(joinedload(SellerOrder.checkout_order))
             .filter(SellerOrder.id == seller_order_id)
+            .with_for_update(of=SellerOrder)
             .first()
         )
 
         if not seller_order:
             return "Order not found"
 
+        checkout = seller_order.checkout_order
+        if seller_order.status == OrderStatusEnum.COMPLETED_PAYOUT:
+            return get_seller_order(db, seller_order_id)
         if seller_order.status != OrderStatusEnum.DELIVERED:
             return f"Escrow can only be released for DELIVERED orders. Current status: {seller_order.status.value}"
 
-        checkout = seller_order.checkout_order
         if checkout.payment_method != PaymentMethodEnum.WALLET:
             # For COD, mark as completed without wallet transfers
             seller_order.status = OrderStatusEnum.COMPLETED_PAYOUT
@@ -499,7 +502,12 @@ def release_escrow(db: Session, seller_order_id: UUID, actor_id: UUID) -> Union[
         seller_payout = round(seller_order.subtotal + seller_order.shipping_fee, 2)
 
         # Credit seller wallet
-        seller_wallet = db.query(Wallet).filter(Wallet.user_id == seller_order.seller_id).first()
+        seller_wallet = (
+            db.query(Wallet)
+            .filter(Wallet.user_id == seller_order.seller_id)
+            .with_for_update()
+            .first()
+        )
         if not seller_wallet:
             return "Seller wallet not found"
 

@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Boolean, DateTime, Float, ForeignKey, Integer, Enum, ARRAY
+from sqlalchemy import Column, String, Boolean, DateTime, Float, ForeignKey, Integer, Enum, ARRAY, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -114,6 +114,14 @@ class Wallet(Base):
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "reference_type",
+            "reference_id",
+            "type",
+            name="uq_transactions_reference_operation",
+        ),
+    )
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     wallet_id = Column(UUID(as_uuid=True), ForeignKey("wallets.id", ondelete="CASCADE"), nullable=False)
