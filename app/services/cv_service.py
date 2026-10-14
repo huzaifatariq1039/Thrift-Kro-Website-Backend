@@ -9,7 +9,6 @@ Contains:
 """
 
 import hashlib
-import io
 import logging
 import math
 from typing import List, Optional, Tuple
@@ -19,6 +18,7 @@ from PIL import Image
 from requests import RequestException
 
 from app.core.config import settings
+from app.services.image_security import decode_base64_image_bounded
 from app.services.media_fetch import UnsafeMediaUrl, load_platform_image
 
 logger = logging.getLogger(__name__)
@@ -319,7 +319,7 @@ class LivenessTracker:
 
 # ─── Utility Functions ────────────────────────────────────────────────
 
-def decode_base64_frame(base64_str: str) -> Tuple[np.ndarray, Image.Image]:
+async def decode_base64_frame(base64_str: str) -> Tuple[np.ndarray, Image.Image]:
     """
     Decode a base64-encoded JPEG frame into both numpy array (for YOLO)
     and PIL Image (for CLIP).
@@ -327,14 +327,8 @@ def decode_base64_frame(base64_str: str) -> Tuple[np.ndarray, Image.Image]:
     Returns:
         (numpy_frame, pil_image)
     """
-    import base64
-
-    # Strip data URL prefix if present
-    if "," in base64_str:
-        base64_str = base64_str.split(",", 1)[1]
-
-    image_bytes = base64.b64decode(base64_str)
-    pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    validated = await decode_base64_image_bounded(base64_str)
+    pil_image = validated.image.convert("RGB")
     numpy_frame = np.array(pil_image)
 
     return numpy_frame, pil_image

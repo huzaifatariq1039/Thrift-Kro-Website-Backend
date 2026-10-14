@@ -1,8 +1,18 @@
+import asyncio
+import logging
 import os
 import cloudinary
 import cloudinary.uploader
 from fastapi import UploadFile, HTTPException
 import uuid
+
+from app.services.image_security import (
+    ImageValidationError,
+    read_validated_image_upload,
+)
+
+
+logger = logging.getLogger(__name__)
 
 # Initialize Cloudinary using environment variables
 # Requires CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in .env
@@ -13,42 +23,35 @@ cloudinary.config(
     secure=True
 )
 
-MAX_FILE_SIZE_MB = 5
-MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
-ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 async def upload_image_to_cloudinary(file: UploadFile) -> str:
     """
     Validates and uploads an image file to Cloudinary.
     Returns the secure HTTPS URL of the uploaded image.
     """
-    if file.content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Invalid file type: {file.content_type}. Only JPEG, PNG, and WebP are allowed."
-        )
+    try:
+        validated = await read_validated_image_upload(file)
+    except ImageValidationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-    # Read file content to check size and upload
-    content = await file.read()
-    
-    if len(content) > MAX_FILE_SIZE_BYTES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File too large. Maximum allowed size is {MAX_FILE_SIZE_MB}MB."
-        )
-        
     try:
         # Generate a unique filename prefix to avoid collisions
         unique_filename = f"thriftkro_{uuid.uuid4().hex[:8]}"
-        
+
         # Upload using cloudinary
-        result = cloudinary.uploader.upload(
-            content,
+        result = await asyncio.to_thread(
+            cloudinary.uploader.upload,
+            validated.content,
             public_id=unique_filename,
             folder="thriftkro/products",
-            resource_type="image"
+            resource_type="image",
+            format=validated.extension,
         )
-        
-        return result.get("secure_url")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+
+        secure_url = result.get("secure_url")
+        if not secure_url or not secure_url.startswith("https://"):
+            raise RuntimeError("Storage provider returned no secure URL")
+        return secure_url
+    except Exception as exc:
+        logger.exception("Image upload to storage failed")
+        raise HTTPException(status_code=502, detail="Image storage is temporarily unavailable") from exc

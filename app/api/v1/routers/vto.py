@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse
 from app.schemas.vto import VTORequest, VTOResponse
 from app.models.user import User
 from app.api.deps import get_current_active_user
+from app.services.image_security import ImageValidationError, read_validated_image_upload
 from gradio_client import Client, handle_file
 import tempfile
 import shutil
@@ -40,6 +41,11 @@ async def run_vto_inference(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user)
 ):
+    try:
+        await read_validated_image_upload(file)
+    except ImageValidationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
     # Mocking VTO model inference processing time
     time.sleep(2)
     
@@ -65,24 +71,25 @@ async def generate_vton(
     Hugging Face Space **huzaifa39/thriftkro-vton-engine**, and streams
     the resulting composite image back to the client.
     """
+    temp_dir: str | None = None
     temp_person_path: str | None = None
     temp_garment_path: str | None = None
 
     try:
-        # ---- write uploaded files to temp dir ----
+        # Validate, decode, and safely re-encode before any engine receives input.
+        person = await read_validated_image_upload(person_image)
+        garment = await read_validated_image_upload(garment_image)
+
         temp_dir = tempfile.mkdtemp()
 
-        person_ext = os.path.splitext(person_image.filename or "img.png")[1] or ".png"
-        garment_ext = os.path.splitext(garment_image.filename or "img.png")[1] or ".png"
-
-        temp_person_path = os.path.join(temp_dir, f"person{person_ext}")
-        temp_garment_path = os.path.join(temp_dir, f"garment{garment_ext}")
+        temp_person_path = os.path.join(temp_dir, f"person.{person.extension}")
+        temp_garment_path = os.path.join(temp_dir, f"garment.{garment.extension}")
 
         with open(temp_person_path, "wb") as f:
-            shutil.copyfileobj(person_image.file, f)
+            f.write(person.content)
 
         with open(temp_garment_path, "wb") as f:
-            shutil.copyfileobj(garment_image.file, f)
+            f.write(garment.content)
 
         # ---- call the Hugging Face Space ----
         client = get_vton_client()
@@ -106,6 +113,8 @@ async def generate_vton(
             filename="vton_result.png",
         )
 
+    except ImageValidationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except HTTPException:
         raise  # re-raise FastAPI HTTP exceptions as-is
     except Exception as exc:

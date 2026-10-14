@@ -30,6 +30,7 @@ from app.services.cv_service import (
     generate_verification_hash,
     analyze_product_image,
 )
+from app.services.image_security import ImageValidationError, read_validated_image_upload
 import app.crud.product as crud_product
 import app.crud.user as crud_user
 import app.crud.verification as crud_verification
@@ -74,12 +75,13 @@ async def verify_product(
     current_seller: User = Depends(get_current_seller),
 ):
     """Legacy endpoint: upload an image for simple AI analysis."""
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Invalid file type. Please upload an image.")
+    try:
+        validated = await read_validated_image_upload(file)
+    except ImageValidationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     try:
-        image_bytes = await file.read()
-        result = await analyze_product_image(image_bytes)
+        result = await analyze_product_image(validated.content)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI processing failed: {str(e)}")
@@ -193,7 +195,7 @@ async def websocket_verify(websocket: WebSocket, product_id: str, token: str = Q
                 continue
 
             try:
-                numpy_frame, pil_image = decode_base64_frame(frame_b64)
+                numpy_frame, pil_image = await decode_base64_frame(frame_b64)
             except Exception:
                 await ws_send(websocket, phase="error", message="Failed to decode frame")
                 continue
@@ -241,7 +243,7 @@ async def websocket_verify(websocket: WebSocket, product_id: str, token: str = Q
                 continue
 
             try:
-                numpy_frame, pil_image = decode_base64_frame(frame_b64)
+                numpy_frame, pil_image = await decode_base64_frame(frame_b64)
             except Exception:
                 continue
 
