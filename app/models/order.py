@@ -162,7 +162,7 @@ class OrderItem(Base):
 
     seller_order = relationship("SellerOrder", back_populates="order_items")
     product_variant = relationship("ProductVariant")
-    reviews = relationship("Review", back_populates="order_item", cascade="all, delete-orphan")
+    reviews = relationship("Review", back_populates="order_item", cascade="save-update, merge")
 
 class OrderStatusHistory(Base):
     __tablename__ = "order_status_history"
