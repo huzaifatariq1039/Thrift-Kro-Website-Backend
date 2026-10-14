@@ -82,6 +82,7 @@ class EscrowPayoutPostgresIntegrationTests(unittest.TestCase):
             db.commit()
             self.seller_order_id = seller_order.id
             self.seller_wallet_id = wallet.id
+            self.buyer_id = buyer.id
 
     def test_concurrent_release_credits_seller_once(self):
         barrier = threading.Barrier(2)
@@ -96,7 +97,7 @@ class EscrowPayoutPostgresIntegrationTests(unittest.TestCase):
                         release_escrow(
                             db=db,
                             seller_order_id=self.seller_order_id,
-                            actor_id=uuid.uuid4(),
+                            actor_id=self.buyer_id,
                         )
                     )
             except Exception as exc:  # pragma: no cover - reported by assertion

@@ -173,7 +173,7 @@ def update_order_status(
     return result
 
 
-# ─── Escrow Release ──────────────────────────────────────────────────
+# ─── Payment Settlement ──────────────────────────────────────────────
 
 @router.post("/seller/{seller_order_id}/release-escrow", response_model=SellerOrderSchema)
 def release_escrow(
@@ -182,8 +182,8 @@ def release_escrow(
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Release escrowed funds to the seller.
-    Only the buyer or admin can release escrow after delivery.
+    Complete a delivered order's payment settlement.
+    Wallet orders release escrow; COD orders record collection completion.
     """
     seller_order = crud_order.get_seller_order(db, seller_order_id)
     if not seller_order:
@@ -196,6 +196,12 @@ def release_escrow(
         raise HTTPException(
             status_code=403,
             detail="Only the buyer or admin can release escrow funds",
+        )
+
+    if seller_order.status == OrderStatusEnum.DISPUTED and not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only an admin can settle a disputed order",
         )
 
     result = crud_order.release_escrow(

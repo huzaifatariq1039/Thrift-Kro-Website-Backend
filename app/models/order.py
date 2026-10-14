@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Float, ForeignKey, Enum, Integer, DateTime, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, String, Float, ForeignKey, Enum, Integer, DateTime, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -17,10 +17,18 @@ class OrderStatusEnum(str, enum.Enum):
     PROCESSING = "PROCESSING"
     SHIPPED = "SHIPPED"
     DELIVERED = "DELIVERED"
+    COMPLETED = "COMPLETED"
     COMPLETED_PAYOUT = "COMPLETED_PAYOUT"
     CANCELLED = "CANCELLED"
     DISPUTED = "DISPUTED"
     REFUNDED = "REFUNDED"
+
+class PaymentStatusEnum(str, enum.Enum):
+    PENDING = "PENDING"
+    HELD = "HELD"
+    SETTLED = "SETTLED"
+    REFUNDED = "REFUNDED"
+    CANCELLED = "CANCELLED"
 
 class CheckoutOrder(Base):
     __tablename__ = "checkout_orders"
@@ -67,6 +75,37 @@ class SellerOrder(Base):
     seller = relationship("User", foreign_keys=[seller_id])
     order_items = relationship("OrderItem", back_populates="seller_order", cascade="all, delete-orphan")
     status_history = relationship("OrderStatusHistory", back_populates="seller_order", cascade="all, delete-orphan")
+    payment = relationship("OrderPayment", back_populates="seller_order", uselist=False, cascade="all, delete-orphan")
+
+class OrderPayment(Base):
+    __tablename__ = "order_payments"
+    __table_args__ = (
+        CheckConstraint("amount >= 0.0", name="order_payments_amount_check"),
+        CheckConstraint("platform_fee >= 0.0", name="order_payments_platform_fee_check"),
+        CheckConstraint("seller_amount >= 0.0", name="order_payments_seller_amount_check"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    seller_order_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("seller_orders.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    payment_method = Column(Enum(PaymentMethodEnum), nullable=False)
+    status = Column(Enum(PaymentStatusEnum), nullable=False)
+    amount = Column(Float, nullable=False)
+    platform_fee = Column(Float, nullable=False)
+    seller_amount = Column(Float, nullable=False)
+    currency = Column(String(3), nullable=False, default="PKR")
+    provider_reference = Column(String, nullable=True, unique=True)
+    recorded_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    settled_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    seller_order = relationship("SellerOrder", back_populates="payment")
+    recorded_by = relationship("User", foreign_keys=[recorded_by_id])
 
 class OrderItem(Base):
     __tablename__ = "order_items"

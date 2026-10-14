@@ -112,7 +112,7 @@ class OrderCompensationPostgresIntegrationTests(unittest.TestCase):
                         db=db,
                         seller_order_id=self.seller_order_id,
                         new_status=OrderStatusEnum.REFUNDED,
-                        actor_id=uuid.uuid4(),
+                        actor_id=self.buyer_id,
                         notes="Integration refund",
                     ))
             except Exception as exc:  # pragma: no cover - reported by assertion
@@ -191,7 +191,7 @@ class OrderCompensationPostgresIntegrationTests(unittest.TestCase):
                 db=db,
                 seller_order_id=seller_order_id,
                 new_status=OrderStatusEnum.CANCELLED,
-                actor_id=uuid.uuid4(),
+                actor_id=self.buyer_id,
                 notes="Integration cancellation",
             )
             self.assertEqual(cancelled.status, OrderStatusEnum.CANCELLED)

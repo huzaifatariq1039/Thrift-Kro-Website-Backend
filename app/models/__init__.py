@@ -1,6 +1,6 @@
 from .user import User, SellerProfile, Wallet, UserAddress, Transaction, RoleEnum, BusinessTypeEnum, VerificationStatusEnum, AddressTypeEnum, TransactionTypeEnum
 from .product import Product, Category, ProductVariant, ProductImage, ProductTag, ConditionEnum, ProductStatusEnum
-from .order import CheckoutOrder, SellerOrder, OrderItem, OrderStatusHistory, PaymentMethodEnum, OrderStatusEnum
+from .order import CheckoutOrder, SellerOrder, OrderItem, OrderStatusHistory, OrderPayment, PaymentMethodEnum, PaymentStatusEnum, OrderStatusEnum
 from .message import Message
 from .review import Review
 from .verification import VerificationLog

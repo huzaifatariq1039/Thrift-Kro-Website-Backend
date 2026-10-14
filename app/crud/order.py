@@ -7,7 +7,7 @@ Order Flow:
   1. Buyer checks out cart → CheckoutOrder created, grouped into SellerOrders
   2. Payment processed (Wallet/COD) → status → PAID_FUNDS_IN_ESCROW or PENDING_PAYMENT
   3. Seller processes → PROCESSING → SHIPPED (with tracking) → DELIVERED
-  4. Buyer confirms → release_escrow → COMPLETED_PAYOUT (seller credited)
+  4. Buyer confirms → wallet payout or recorded COD completion
 """
 from datetime import datetime, timezone
 from collections import defaultdict
@@ -19,8 +19,8 @@ from sqlalchemy.exc import IntegrityError
 from uuid import UUID
 
 from app.models.order import (
-    CheckoutOrder, SellerOrder, OrderItem, OrderStatusHistory,
-    PaymentMethodEnum, OrderStatusEnum,
+    CheckoutOrder, SellerOrder, OrderItem, OrderStatusHistory, OrderPayment,
+    PaymentMethodEnum, PaymentStatusEnum, OrderStatusEnum,
 )
 from app.models.shopping import CartSession, CartItem
 from app.models.product import Product, ProductStatusEnum, ProductVariant
@@ -34,14 +34,15 @@ FLAT_SHIPPING_FEE = 200.0  # PKR flat rate per seller order
 
 # Valid status transitions (state machine)
 VALID_TRANSITIONS = {
-    OrderStatusEnum.PENDING_PAYMENT: [OrderStatusEnum.PAID_FUNDS_IN_ESCROW, OrderStatusEnum.CANCELLED],
+    OrderStatusEnum.PENDING_PAYMENT: [OrderStatusEnum.PAID_FUNDS_IN_ESCROW, OrderStatusEnum.PROCESSING, OrderStatusEnum.CANCELLED],
     OrderStatusEnum.PAID_FUNDS_IN_ESCROW: [OrderStatusEnum.PROCESSING, OrderStatusEnum.CANCELLED, OrderStatusEnum.REFUNDED],
     OrderStatusEnum.PROCESSING: [OrderStatusEnum.SHIPPED, OrderStatusEnum.CANCELLED],
     OrderStatusEnum.SHIPPED: [OrderStatusEnum.DELIVERED, OrderStatusEnum.DISPUTED],
-    OrderStatusEnum.DELIVERED: [OrderStatusEnum.COMPLETED_PAYOUT, OrderStatusEnum.DISPUTED],
+    OrderStatusEnum.DELIVERED: [OrderStatusEnum.DISPUTED],
+    OrderStatusEnum.COMPLETED: [],  # Terminal COD state
     OrderStatusEnum.COMPLETED_PAYOUT: [],  # Terminal state
     OrderStatusEnum.CANCELLED: [],  # Terminal state
-    OrderStatusEnum.DISPUTED: [OrderStatusEnum.REFUNDED, OrderStatusEnum.COMPLETED_PAYOUT],
+    OrderStatusEnum.DISPUTED: [OrderStatusEnum.REFUNDED],
     OrderStatusEnum.REFUNDED: [],  # Terminal state
 }
 
@@ -62,7 +63,7 @@ def _compute_overall_status(seller_orders: list) -> str:
     statuses = [so.status for so in seller_orders]
 
     # If all completed
-    if all(s == OrderStatusEnum.COMPLETED_PAYOUT for s in statuses):
+    if all(s in (OrderStatusEnum.COMPLETED, OrderStatusEnum.COMPLETED_PAYOUT) for s in statuses):
         return "COMPLETED"
     # If any disputed
     if any(s == OrderStatusEnum.DISPUTED for s in statuses):
@@ -78,6 +79,40 @@ def _compute_overall_status(seller_orders: list) -> str:
         return "CANCELLED"
     # Default
     return statuses[0].value if statuses else "PENDING"
+
+
+def _get_or_create_order_payment(
+    db: Session,
+    seller_order: SellerOrder,
+    checkout: CheckoutOrder,
+) -> OrderPayment:
+    """Lock an order payment allocation, creating one for pre-migration orders."""
+    payment = (
+        db.query(OrderPayment)
+        .filter(OrderPayment.seller_order_id == seller_order.id)
+        .with_for_update()
+        .first()
+    )
+    if payment:
+        return payment
+
+    initial_status = (
+        PaymentStatusEnum.HELD
+        if checkout.payment_method == PaymentMethodEnum.WALLET
+        else PaymentStatusEnum.PENDING
+    )
+    payment = OrderPayment(
+        seller_order_id=seller_order.id,
+        payment_method=checkout.payment_method,
+        status=initial_status,
+        amount=seller_order.total_amount,
+        platform_fee=seller_order.platform_fee,
+        seller_amount=round(seller_order.subtotal + seller_order.shipping_fee, 2),
+        currency="PKR",
+    )
+    db.add(payment)
+    db.flush()
+    return payment
 
 
 # ─── Create Order ─────────────────────────────────────────────────────
@@ -116,6 +151,9 @@ def create_order_from_cart(
         )
         if existing_order:
             return get_order(db, existing_order.id)
+
+        if payment_method == PaymentMethodEnum.CARD:
+            return "Card payments are unavailable until a verified payment provider is configured"
 
         # 1. Get cart items
         cart_session = (
@@ -265,6 +303,20 @@ def create_order_from_cart(
             )
             db.add(seller_order)
             db.flush()
+
+            db.add(OrderPayment(
+                seller_order_id=seller_order.id,
+                payment_method=payment_method,
+                status=(
+                    PaymentStatusEnum.HELD
+                    if payment_method == PaymentMethodEnum.WALLET
+                    else PaymentStatusEnum.PENDING
+                ),
+                amount=sd["total"],
+                platform_fee=sd["platform_fee"],
+                seller_amount=round(sd["subtotal"] + sd["shipping_fee"], 2),
+                currency="PKR",
+            ))
 
             # Record initial status
             db.add(OrderStatusHistory(
@@ -427,12 +479,23 @@ def update_order_status(
             return get_seller_order(db, seller_order_id)
 
         # Validate state transition
+        if new_status in (OrderStatusEnum.COMPLETED, OrderStatusEnum.COMPLETED_PAYOUT):
+            return "Order completion must use the settlement endpoint"
+
         allowed = VALID_TRANSITIONS.get(seller_order.status, [])
         if new_status not in allowed:
             return (
                 f"Cannot transition from {seller_order.status.value} to {new_status.value}. "
                 f"Allowed transitions: {[s.value for s in allowed]}"
             )
+
+        checkout = seller_order.checkout_order
+        if (
+            seller_order.status == OrderStatusEnum.PENDING_PAYMENT
+            and new_status == OrderStatusEnum.PROCESSING
+            and checkout.payment_method != PaymentMethodEnum.CASH_ON_DELIVERY
+        ):
+            return "Only cash-on-delivery orders can enter fulfillment before online payment"
 
         now = datetime.now(timezone.utc)
 
@@ -461,7 +524,6 @@ def update_order_status(
                     return "Cannot compensate order because an inventory record is missing"
 
             buyer_wallet = None
-            checkout = seller_order.checkout_order
             if checkout.payment_method == PaymentMethodEnum.WALLET:
                 existing_refund = (
                     db.query(Transaction)
@@ -501,6 +563,15 @@ def update_order_status(
                     description=f"Refund for seller order {seller_order.id}",
                 ))
 
+            payment = _get_or_create_order_payment(db, seller_order, checkout)
+            payment.status = (
+                PaymentStatusEnum.REFUNDED
+                if new_status == OrderStatusEnum.REFUNDED or buyer_wallet is not None
+                else PaymentStatusEnum.CANCELLED
+            )
+            payment.recorded_by_id = actor_id
+            payment.settled_at = now
+
         # Apply status-specific logic
         seller_order.status = new_status
 
@@ -533,16 +604,10 @@ def update_order_status(
 
 def release_escrow(db: Session, seller_order_id: UUID, actor_id: UUID) -> Union[SellerOrder, str]:
     """
-    Release escrowed funds to the seller after delivery confirmation.
+    Complete settlement after delivery confirmation.
 
-    Only works when:
-      - Order status is DELIVERED
-      - Payment method was WALLET (funds are in escrow)
-
-    Steps:
-      1. Credit seller wallet with (subtotal - platform_fee)
-      2. Create Transaction records
-      3. Update status to COMPLETED_PAYOUT
+    Wallet orders credit the seller and complete the payout. COD orders record
+    the cash collection allocation without creating a wallet movement.
     """
     try:
         seller_order = (
@@ -557,18 +622,26 @@ def release_escrow(db: Session, seller_order_id: UUID, actor_id: UUID) -> Union[
             return "Order not found"
 
         checkout = seller_order.checkout_order
-        if seller_order.status == OrderStatusEnum.COMPLETED_PAYOUT:
+        if seller_order.status in (OrderStatusEnum.COMPLETED, OrderStatusEnum.COMPLETED_PAYOUT):
             return get_seller_order(db, seller_order_id)
-        if seller_order.status != OrderStatusEnum.DELIVERED:
-            return f"Escrow can only be released for DELIVERED orders. Current status: {seller_order.status.value}"
+        if seller_order.status not in (OrderStatusEnum.DELIVERED, OrderStatusEnum.DISPUTED):
+            return f"Settlement can only complete DELIVERED or DISPUTED orders. Current status: {seller_order.status.value}"
 
-        if checkout.payment_method != PaymentMethodEnum.WALLET:
-            # For COD, mark as completed without wallet transfers
-            seller_order.status = OrderStatusEnum.COMPLETED_PAYOUT
+        if checkout.payment_method == PaymentMethodEnum.CARD:
+            return "Card settlement is unavailable without a verified provider event"
+
+        payment = _get_or_create_order_payment(db, seller_order, checkout)
+
+        if checkout.payment_method == PaymentMethodEnum.CASH_ON_DELIVERY:
+            # Record collection/allocation without creating a fictitious wallet payout.
+            payment.status = PaymentStatusEnum.SETTLED
+            payment.recorded_by_id = actor_id
+            payment.settled_at = datetime.now(timezone.utc)
+            seller_order.status = OrderStatusEnum.COMPLETED
             db.add(OrderStatusHistory(
                 seller_order_id=seller_order.id,
-                status=OrderStatusEnum.COMPLETED_PAYOUT,
-                notes="Completed (Cash on Delivery)",
+                status=OrderStatusEnum.COMPLETED,
+                notes="Cash on delivery collected and order completed",
             ))
             db.commit()
             return get_seller_order(db, seller_order_id)
@@ -599,6 +672,10 @@ def release_escrow(db: Session, seller_order_id: UUID, actor_id: UUID) -> Union[
             status="COMPLETED",
             description=f"Escrow release for order {seller_order.id}",
         ))
+
+        payment.status = PaymentStatusEnum.SETTLED
+        payment.recorded_by_id = actor_id
+        payment.settled_at = datetime.now(timezone.utc)
 
         # Update status
         seller_order.status = OrderStatusEnum.COMPLETED_PAYOUT
