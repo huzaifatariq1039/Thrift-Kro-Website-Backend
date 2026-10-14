@@ -1,6 +1,18 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Float, ForeignKey, Integer, Enum, Text, Boolean, DateTime
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -39,6 +51,17 @@ class Category(Base):
 
 class Product(Base):
     __tablename__ = "products"
+    __table_args__ = (
+        CheckConstraint("price >= 0.0", name="products_base_price_check"),
+        Index("idx_products_catalog", "category_id", "status"),
+        Index("idx_products_seller", "seller_id"),
+        Index(
+            "idx_products_name_trgm",
+            "name",
+            postgresql_using="gin",
+            postgresql_ops={"name": "gin_trgm_ops"},
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     seller_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
@@ -46,14 +69,22 @@ class Product(Base):
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     brand = Column(String, nullable=True)
-    condition = Column(Enum(ConditionEnum), default=ConditionEnum.NEW, nullable=False)
-    base_price = Column(Float, nullable=False)
+    condition = Column(
+        Enum(
+            ConditionEnum,
+            values_callable=lambda enum_class: [member.value for member in enum_class],
+        ),
+        default=ConditionEnum.NEW,
+        nullable=False,
+    )
+    price = Column(Float, nullable=False)
     original_price = Column(Float, nullable=True)
     status = Column(Enum(ProductStatusEnum), default=ProductStatusEnum.AVAILABLE, nullable=False)
     is_ai_verified = Column(Boolean, default=False)
     verification_hash = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     seller = relationship("User", back_populates="products")
     category = relationship("Category", back_populates="products")

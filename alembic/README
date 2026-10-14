@@ -1,1 +1,25 @@
-Generic single-database configuration.
+Thrift Kro database migrations
+===============================
+
+New empty database
+------------------
+
+Configure ``DATABASE_URL`` and ``SECRET_KEY``, then run::
+
+    alembic upgrade head
+
+Existing pgAdmin database
+-------------------------
+
+Do not run the baseline migration directly over an existing database. Verify
+the existing schema first (this is read-only)::
+
+    python -m scripts.adopt_existing_database
+
+After taking a database backup, apply the guarded known repairs and stamp the
+verified schema::
+
+    python -m scripts.adopt_existing_database --apply
+
+The command requires typing the database name. Use ``--yes`` only in controlled
+automation. It never drops, truncates, recreates, or seeds application tables.
