@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from jose import JWTError, jwt
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -7,12 +6,11 @@ from typing import Dict, List, Set
 from uuid import UUID
 
 from app.api.deps import get_current_active_user, get_db
-from app.core.config import settings
 from app.models.message import Message
 from app.models.order import SellerOrder
 from app.models.user import User
 from app.schemas.chat import MessageCreate, MessageResponse
-import app.crud.user as crud_user
+from app.services.auth_lifecycle import AuthenticationError, validate_access_token
 
 router = APIRouter()
 
@@ -32,18 +30,9 @@ def get_websocket_bearer_token(websocket: WebSocket) -> str:
 def authenticate_websocket_user(token: str, db: Session) -> User:
     """Resolve an active user from an access token before accepting the socket."""
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        token_type = payload.get("type")
-        if token_type not in (None, "access"):
-            raise WebSocketAuthenticationError("Invalid token type")
-        user_id = UUID(payload["sub"])
-    except (JWTError, KeyError, TypeError, ValueError) as exc:
+        return validate_access_token(db, token).user
+    except AuthenticationError as exc:
         raise WebSocketAuthenticationError("Invalid or expired token") from exc
-
-    user = crud_user.get_user(db, user_id=user_id)
-    if user is None or not user.is_active:
-        raise WebSocketAuthenticationError("Invalid or inactive user")
-    return user
 
 
 def authorize_order_conversation(

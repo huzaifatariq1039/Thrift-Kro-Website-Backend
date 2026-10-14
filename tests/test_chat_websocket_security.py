@@ -13,7 +13,6 @@ os.environ.setdefault("SECRET_KEY", "test-only-secret-key-with-at-least-32-chara
 
 from app.api.deps import get_db
 from app.api.v1.routers.chat import manager, router as chat_router
-from app.core.security import create_access_token
 
 
 class FakeSession:
@@ -69,8 +68,9 @@ class ChatWebSocketSecurityTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 1008)
 
     def test_rejects_path_identity_that_does_not_match_token(self):
-        token = create_access_token(self.buyer_id)
-        with patch("app.api.v1.routers.chat.crud_user.get_user", return_value=self.user):
+        token = "session-bound-test-token"
+        context = SimpleNamespace(user=self.user)
+        with patch("app.api.v1.routers.chat.validate_access_token", return_value=context):
             with self.assertRaises(WebSocketDisconnect) as caught:
                 with self.client.websocket_connect(
                     f"/chat/ws/chat/{uuid4()}",
@@ -80,8 +80,9 @@ class ChatWebSocketSecurityTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 1008)
 
     def test_persists_authenticated_sender_for_authorized_order(self):
-        token = create_access_token(self.buyer_id)
-        with patch("app.api.v1.routers.chat.crud_user.get_user", return_value=self.user):
+        token = "session-bound-test-token"
+        context = SimpleNamespace(user=self.user)
+        with patch("app.api.v1.routers.chat.validate_access_token", return_value=context):
             with self.client.websocket_connect(
                 f"/chat/ws/chat/{self.buyer_id}",
                 subprotocols=["bearer", token],
@@ -102,9 +103,10 @@ class ChatWebSocketSecurityTests(unittest.TestCase):
         self.assertEqual(self.db.added[0].content, "Is this ready to ship?")
 
     def test_rejects_message_outside_order_participants(self):
-        token = create_access_token(self.buyer_id)
+        token = "session-bound-test-token"
         attacker_selected_receiver = uuid4()
-        with patch("app.api.v1.routers.chat.crud_user.get_user", return_value=self.user):
+        context = SimpleNamespace(user=self.user)
+        with patch("app.api.v1.routers.chat.validate_access_token", return_value=context):
             with self.client.websocket_connect(
                 f"/chat/ws/chat/{self.buyer_id}",
                 subprotocols=["bearer", token],

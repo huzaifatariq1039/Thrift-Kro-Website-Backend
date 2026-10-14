@@ -1,13 +1,16 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from jose import jwt, JWTError
 from app.core.database import SessionLocal
-from app.core.config import settings
 from app.models.user import User, RoleEnum, VerificationStatusEnum
-import app.crud.user as crud_user
+from app.services.auth_lifecycle import (
+    AuthContext,
+    AuthenticationError,
+    validate_access_token,
+)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
 
 def get_db():
     db = SessionLocal()
@@ -16,34 +19,39 @@ def get_db():
     finally:
         db.close()
 
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
+
+def get_current_auth_context(
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme),
+) -> AuthContext:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-        
-    user = crud_user.get_user(db, user_id=user_id)
-    if user is None:
-        raise credentials_exception
-    return user
+        return validate_access_token(db, token)
+    except AuthenticationError as exc:
+        raise credentials_exception from exc
+
+
+def get_current_user(
+    context: AuthContext = Depends(get_current_auth_context),
+) -> User:
+    return context.user
+
 
 def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
+
 def get_current_seller(current_user: User = Depends(get_current_active_user)) -> User:
     if current_user.role != RoleEnum.SELLER:
         raise HTTPException(status_code=403, detail="The user doesn't have enough privileges")
     return current_user
+
 
 def get_current_verified_seller(current_user: User = Depends(get_current_seller)) -> User:
     """Only sellers with APPROVED verification can create/manage listings."""
@@ -58,6 +66,7 @@ def get_current_verified_seller(current_user: User = Depends(get_current_seller)
         )
     return current_user
 
+
 def get_current_buyer(current_user: User = Depends(get_current_active_user)) -> User:
     """Only BUYER users can access buyer-specific endpoints like checkout."""
     if current_user.role != RoleEnum.BUYER:
@@ -66,6 +75,7 @@ def get_current_buyer(current_user: User = Depends(get_current_active_user)) -> 
             detail="Buyer access required.",
         )
     return current_user
+
 
 def get_current_admin(current_user: User = Depends(get_current_active_user)) -> User:
     """Only ADMIN users can access admin endpoints."""

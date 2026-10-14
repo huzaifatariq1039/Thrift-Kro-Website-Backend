@@ -14,7 +14,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
-from jose import jwt, JWTError
 
 from app.core.config import settings
 from app.core.database import SessionLocal
@@ -31,8 +30,8 @@ from app.services.cv_service import (
     analyze_product_image,
 )
 from app.services.image_security import ImageValidationError, read_validated_image_upload
+from app.services.auth_lifecycle import AuthenticationError, validate_access_token
 import app.crud.product as crud_product
-import app.crud.user as crud_user
 import app.crud.verification as crud_verification
 
 logger = logging.getLogger(__name__)
@@ -45,16 +44,9 @@ router = APIRouter()
 def authenticate_ws_user(token: str, db: Session) -> User:
     """Validate a JWT token and return the User, or raise ValueError."""
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise ValueError("Invalid token: no subject")
-    except JWTError:
-        raise ValueError("Invalid or expired token")
-
-    user = crud_user.get_user(db, user_id=user_id)
-    if user is None:
-        raise ValueError("User not found")
+        user = validate_access_token(db, token).user
+    except AuthenticationError as exc:
+        raise ValueError("Invalid or expired token") from exc
     if user.role != RoleEnum.SELLER:
         raise ValueError("Only sellers can verify products")
     return user
