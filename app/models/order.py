@@ -1,7 +1,7 @@
 import uuid
 import enum
 from sqlalchemy import CheckConstraint, Column, String, Float, ForeignKey, Enum, Integer, DateTime, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -43,9 +43,12 @@ class CheckoutOrder(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     buyer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     total_amount = Column(Float, nullable=False)
+    currency = Column(String(3), nullable=False, default="PKR", server_default="PKR")
     payment_method = Column(Enum(PaymentMethodEnum), nullable=False)
     shipping_address_id = Column(UUID(as_uuid=True), ForeignKey("user_addresses.id", ondelete="SET NULL"), nullable=True)
     billing_address_id = Column(UUID(as_uuid=True), ForeignKey("user_addresses.id", ondelete="SET NULL"), nullable=True)
+    shipping_address_snapshot = Column(JSONB, nullable=True)
+    billing_address_snapshot = Column(JSONB, nullable=True)
     idempotency_key = Column(String(128), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -63,6 +66,7 @@ class SellerOrder(Base):
     shipping_fee = Column(Float, nullable=False)
     platform_fee = Column(Float, nullable=False)
     total_amount = Column(Float, nullable=False)
+    currency = Column(String(3), nullable=False, default="PKR", server_default="PKR")
     status = Column(Enum(OrderStatusEnum), default=OrderStatusEnum.PENDING_PAYMENT, nullable=False)
     tracking_number = Column(String, nullable=True)
     courier_name = Column(String, nullable=True)
@@ -76,6 +80,13 @@ class SellerOrder(Base):
     order_items = relationship("OrderItem", back_populates="seller_order", cascade="all, delete-orphan")
     status_history = relationship("OrderStatusHistory", back_populates="seller_order", cascade="all, delete-orphan")
     payment = relationship("OrderPayment", back_populates="seller_order", uselist=False, cascade="all, delete-orphan")
+
+    @property
+    def shipping_address_snapshot(self):
+        """Expose the parent order's immutable fulfillment address to serializers."""
+        if self.checkout_order is None:
+            return None
+        return self.checkout_order.shipping_address_snapshot
 
 class OrderPayment(Base):
     __tablename__ = "order_payments"
@@ -113,8 +124,14 @@ class OrderItem(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     seller_order_id = Column(UUID(as_uuid=True), ForeignKey("seller_orders.id", ondelete="CASCADE"), nullable=False)
     product_variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id", ondelete="RESTRICT"), nullable=False)
+    product_id_snapshot = Column(UUID(as_uuid=True), nullable=False)
+    product_name_snapshot = Column(String, nullable=False)
+    product_image_snapshot = Column(String, nullable=True)
+    sku_snapshot = Column(String, nullable=True)
+    variant_attributes_snapshot = Column(JSONB, nullable=False, default=dict, server_default="{}")
     price_at_purchase = Column(Float, nullable=False)
     quantity = Column(Integer, nullable=False)
+    currency = Column(String(3), nullable=False, default="PKR", server_default="PKR")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     seller_order = relationship("SellerOrder", back_populates="order_items")

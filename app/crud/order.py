@@ -31,6 +31,7 @@ from app.models.user import User, Wallet, Transaction, TransactionTypeEnum, User
 
 PLATFORM_FEE_RATE = 0.05  # 5% platform fee
 FLAT_SHIPPING_FEE = 200.0  # PKR flat rate per seller order
+CURRENCY = "PKR"
 
 # Valid status transitions (state machine)
 VALID_TRANSITIONS = {
@@ -53,6 +54,24 @@ def _build_order_response(order: CheckoutOrder) -> CheckoutOrder:
     """Eagerly load all relationships for the response."""
     # The order is already loaded with relationships via joinedload
     return order
+
+
+def _snapshot_address(address: Optional[UserAddress]) -> Optional[dict]:
+    """Copy fulfillment data so later address edits cannot rewrite an order."""
+    if address is None:
+        return None
+
+    address_type = address.type.value if hasattr(address.type, "value") else str(address.type)
+    return {
+        "type": address_type,
+        "full_name": address.full_name,
+        "phone_number": address.phone_number,
+        "street_address": address.street_address,
+        "city": address.city,
+        "state_province": address.state_province,
+        "postal_code": address.postal_code,
+        "country": address.country,
+    }
 
 
 def _compute_overall_status(seller_orders: list) -> str:
@@ -204,12 +223,13 @@ def create_order_from_cart(
             required_stock[cart_item.product_variant_id] += cart_item.quantity
 
         # 2. Validate shipping address ownership
+        shipping_address = None
         if shipping_address_id:
-            address = db.query(UserAddress).filter(
+            shipping_address = db.query(UserAddress).filter(
                 UserAddress.id == shipping_address_id,
                 UserAddress.user_id == buyer_id,
             ).first()
-            if not address:
+            if not shipping_address:
                 return "Shipping address not found or does not belong to you"
 
         # 3. Group items by seller
@@ -283,8 +303,10 @@ def create_order_from_cart(
         checkout_order = CheckoutOrder(
             buyer_id=buyer_id,
             total_amount=grand_total,
+            currency=CURRENCY,
             payment_method=payment_method,
             shipping_address_id=shipping_address_id,
+            shipping_address_snapshot=_snapshot_address(shipping_address),
             idempotency_key=idempotency_key,
         )
         db.add(checkout_order)
@@ -299,6 +321,7 @@ def create_order_from_cart(
                 shipping_fee=sd["shipping_fee"],
                 platform_fee=sd["platform_fee"],
                 total_amount=sd["total"],
+                currency=CURRENCY,
                 status=initial_status,
             )
             db.add(seller_order)
@@ -315,7 +338,7 @@ def create_order_from_cart(
                 amount=sd["total"],
                 platform_fee=sd["platform_fee"],
                 seller_amount=round(sd["subtotal"] + sd["shipping_fee"], 2),
-                currency="PKR",
+                currency=CURRENCY,
             ))
 
             # Record initial status
@@ -327,12 +350,26 @@ def create_order_from_cart(
 
             for cart_item, variant, product in sd["items"]:
                 unit_price = product.price + variant.price_adjustment
+                primary_image = min(
+                    product.images,
+                    key=lambda image: (
+                        not bool(image.is_primary),
+                        image.display_order or 0,
+                        str(image.id),
+                    ),
+                ).image_url if product.images else None
 
                 db.add(OrderItem(
                     seller_order_id=seller_order.id,
                     product_variant_id=variant.id,
+                    product_id_snapshot=product.id,
+                    product_name_snapshot=product.name,
+                    product_image_snapshot=primary_image,
+                    sku_snapshot=variant.sku,
+                    variant_attributes_snapshot=dict(variant.attributes or {}),
                     price_at_purchase=unit_price,
                     quantity=cart_item.quantity,
+                    currency=CURRENCY,
                 ))
 
         # Decrement each locked variant once using the aggregated cart quantity.
