@@ -11,6 +11,7 @@ Order Flow:
 """
 from datetime import datetime, timezone
 from collections import defaultdict
+from decimal import Decimal
 from typing import List, Optional, Union
 
 from sqlalchemy.orm import Session, joinedload
@@ -25,12 +26,13 @@ from app.models.order import (
 from app.models.shopping import CartSession, CartItem
 from app.models.product import Product, ProductStatusEnum, ProductVariant
 from app.models.user import User, Wallet, Transaction, TransactionTypeEnum, UserAddress
+from app.core.money import money, ZERO_MONEY
 
 
 # ─── Constants ────────────────────────────────────────────────────────
 
-PLATFORM_FEE_RATE = 0.05  # 5% platform fee
-FLAT_SHIPPING_FEE = 200.0  # PKR flat rate per seller order
+PLATFORM_FEE_RATE = Decimal("0.05")  # 5% platform fee
+FLAT_SHIPPING_FEE = Decimal("200.00")  # PKR flat rate per seller order
 CURRENCY = "PKR"
 
 # Valid status transitions (state machine)
@@ -126,7 +128,7 @@ def _get_or_create_order_payment(
         status=initial_status,
         amount=seller_order.total_amount,
         platform_fee=seller_order.platform_fee,
-        seller_amount=round(seller_order.subtotal + seller_order.shipping_fee, 2),
+        seller_amount=money(seller_order.subtotal) + money(seller_order.shipping_fee),
         currency="PKR",
     )
     db.add(payment)
@@ -257,18 +259,18 @@ def create_order_from_cart(
             return "No valid items in cart"
 
         # 4. Calculate totals
-        grand_total = 0.0
+        grand_total = ZERO_MONEY
         seller_data = []
 
         for seller_id, items in seller_groups.items():
-            subtotal = 0.0
+            subtotal = ZERO_MONEY
             for cart_item, variant, product in items:
-                unit_price = product.price + variant.price_adjustment
+                unit_price = money(product.price) + money(variant.price_adjustment)
                 subtotal += unit_price * cart_item.quantity
 
             shipping_fee = FLAT_SHIPPING_FEE
-            platform_fee = round(subtotal * PLATFORM_FEE_RATE, 2)
-            total = round(subtotal + shipping_fee + platform_fee, 2)
+            platform_fee = money(subtotal * PLATFORM_FEE_RATE)
+            total = money(subtotal + shipping_fee + platform_fee)
             grand_total += total
 
             seller_data.append({
@@ -280,7 +282,7 @@ def create_order_from_cart(
                 "total": total,
             })
 
-        grand_total = round(grand_total, 2)
+        grand_total = money(grand_total)
 
         # 5. Wallet payment validation
         initial_status = OrderStatusEnum.PENDING_PAYMENT
@@ -337,7 +339,7 @@ def create_order_from_cart(
                 ),
                 amount=sd["total"],
                 platform_fee=sd["platform_fee"],
-                seller_amount=round(sd["subtotal"] + sd["shipping_fee"], 2),
+                seller_amount=money(sd["subtotal"] + sd["shipping_fee"]),
                 currency=CURRENCY,
             ))
 
@@ -349,7 +351,7 @@ def create_order_from_cart(
             ))
 
             for cart_item, variant, product in sd["items"]:
-                unit_price = product.price + variant.price_adjustment
+                unit_price = money(product.price) + money(variant.price_adjustment)
                 primary_image = min(
                     product.images,
                     key=lambda image: (
@@ -378,8 +380,7 @@ def create_order_from_cart(
 
         # 8. Process wallet payment
         if payment_method == PaymentMethodEnum.WALLET:
-            wallet.balance -= grand_total
-            wallet.balance = round(wallet.balance, 2)
+            wallet.balance = money(wallet.balance) - grand_total
 
             db.add(Transaction(
                 wallet_id=wallet.id,
@@ -588,8 +589,8 @@ def update_order_status(
                 variants_by_id[variant_id].quantity_in_stock += quantity
 
             if buyer_wallet is not None:
-                refund_amount = round(seller_order.total_amount, 2)
-                buyer_wallet.balance = round(buyer_wallet.balance + refund_amount, 2)
+                refund_amount = money(seller_order.total_amount)
+                buyer_wallet.balance = money(buyer_wallet.balance + refund_amount)
                 db.add(Transaction(
                     wallet_id=buyer_wallet.id,
                     type=TransactionTypeEnum.REFUND,
@@ -684,7 +685,7 @@ def release_escrow(db: Session, seller_order_id: UUID, actor_id: UUID) -> Union[
             return get_seller_order(db, seller_order_id)
 
         # Calculate seller payout
-        seller_payout = round(seller_order.subtotal + seller_order.shipping_fee, 2)
+        seller_payout = money(seller_order.subtotal) + money(seller_order.shipping_fee)
 
         # Credit seller wallet
         seller_wallet = (
@@ -696,8 +697,7 @@ def release_escrow(db: Session, seller_order_id: UUID, actor_id: UUID) -> Union[
         if not seller_wallet:
             return "Seller wallet not found"
 
-        seller_wallet.balance += seller_payout
-        seller_wallet.balance = round(seller_wallet.balance, 2)
+        seller_wallet.balance = money(seller_wallet.balance + seller_payout)
 
         # Record seller credit transaction
         db.add(Transaction(

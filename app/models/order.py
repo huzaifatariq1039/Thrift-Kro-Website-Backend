@@ -1,10 +1,11 @@
 import uuid
 import enum
-from sqlalchemy import CheckConstraint, Column, String, Float, ForeignKey, Enum, Integer, DateTime, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, String, ForeignKey, Enum, Integer, Numeric, DateTime, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
+from app.core.money import MONEY_PRECISION, MONEY_SCALE
 
 class PaymentMethodEnum(str, enum.Enum):
     WALLET = "WALLET"
@@ -38,11 +39,15 @@ class CheckoutOrder(Base):
             "idempotency_key",
             name="uq_checkout_orders_buyer_idempotency_key",
         ),
+        CheckConstraint(
+            "total_amount >= 0.0",
+            name="checkout_orders_total_amount_check",
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     buyer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    total_amount = Column(Float, nullable=False)
+    total_amount = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
     currency = Column(String(3), nullable=False, default="PKR", server_default="PKR")
     payment_method = Column(Enum(PaymentMethodEnum), nullable=False)
     shipping_address_id = Column(UUID(as_uuid=True), ForeignKey("user_addresses.id", ondelete="SET NULL"), nullable=True)
@@ -58,14 +63,24 @@ class CheckoutOrder(Base):
 
 class SellerOrder(Base):
     __tablename__ = "seller_orders"
+    __table_args__ = (
+        CheckConstraint("subtotal >= 0.0", name="seller_orders_subtotal_check"),
+        CheckConstraint("shipping_fee >= 0.0", name="seller_orders_shipping_fee_check"),
+        CheckConstraint("platform_fee >= 0.0", name="seller_orders_platform_fee_check"),
+        CheckConstraint("total_amount >= 0.0", name="seller_orders_total_amount_check"),
+        CheckConstraint(
+            "total_amount = subtotal + shipping_fee + platform_fee",
+            name="seller_orders_total_components_check",
+        ),
+    )
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     checkout_order_id = Column(UUID(as_uuid=True), ForeignKey("checkout_orders.id", ondelete="CASCADE"), nullable=False)
     seller_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    subtotal = Column(Float, nullable=False)
-    shipping_fee = Column(Float, nullable=False)
-    platform_fee = Column(Float, nullable=False)
-    total_amount = Column(Float, nullable=False)
+    subtotal = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
+    shipping_fee = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
+    platform_fee = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
+    total_amount = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
     currency = Column(String(3), nullable=False, default="PKR", server_default="PKR")
     status = Column(Enum(OrderStatusEnum), default=OrderStatusEnum.PENDING_PAYMENT, nullable=False)
     tracking_number = Column(String, nullable=True)
@@ -94,6 +109,10 @@ class OrderPayment(Base):
         CheckConstraint("amount >= 0.0", name="order_payments_amount_check"),
         CheckConstraint("platform_fee >= 0.0", name="order_payments_platform_fee_check"),
         CheckConstraint("seller_amount >= 0.0", name="order_payments_seller_amount_check"),
+        CheckConstraint(
+            "amount = platform_fee + seller_amount",
+            name="order_payments_allocation_check",
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
@@ -105,9 +124,9 @@ class OrderPayment(Base):
     )
     payment_method = Column(Enum(PaymentMethodEnum), nullable=False)
     status = Column(Enum(PaymentStatusEnum), nullable=False)
-    amount = Column(Float, nullable=False)
-    platform_fee = Column(Float, nullable=False)
-    seller_amount = Column(Float, nullable=False)
+    amount = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
+    platform_fee = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
+    seller_amount = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
     currency = Column(String(3), nullable=False, default="PKR")
     provider_reference = Column(String, nullable=True, unique=True)
     recorded_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -120,6 +139,13 @@ class OrderPayment(Base):
 
 class OrderItem(Base):
     __tablename__ = "order_items"
+    __table_args__ = (
+        CheckConstraint(
+            "price_at_purchase >= 0.0",
+            name="order_items_price_at_purchase_check",
+        ),
+        CheckConstraint("quantity > 0", name="order_items_quantity_check"),
+    )
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     seller_order_id = Column(UUID(as_uuid=True), ForeignKey("seller_orders.id", ondelete="CASCADE"), nullable=False)
@@ -129,7 +155,7 @@ class OrderItem(Base):
     product_image_snapshot = Column(String, nullable=True)
     sku_snapshot = Column(String, nullable=True)
     variant_attributes_snapshot = Column(JSONB, nullable=False, default=dict, server_default="{}")
-    price_at_purchase = Column(Float, nullable=False)
+    price_at_purchase = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
     quantity = Column(Integer, nullable=False)
     currency = Column(String(3), nullable=False, default="PKR", server_default="PKR")
     created_at = Column(DateTime(timezone=True), server_default=func.now())

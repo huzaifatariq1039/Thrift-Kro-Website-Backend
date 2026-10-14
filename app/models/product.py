@@ -6,10 +6,10 @@ from sqlalchemy import (
     Column,
     DateTime,
     Enum,
-    Float,
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
 )
@@ -17,6 +17,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
+from app.core.money import MONEY_PRECISION, MONEY_SCALE, ZERO_MONEY
 
 class ConditionEnum(str, enum.Enum):
     NEW = "New"
@@ -53,6 +54,10 @@ class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
         CheckConstraint("price >= 0.0", name="products_base_price_check"),
+        CheckConstraint(
+            "original_price IS NULL OR original_price >= 0.0",
+            name="products_original_price_check",
+        ),
         Index("idx_products_catalog", "category_id", "status"),
         Index("idx_products_seller", "seller_id"),
         Index(
@@ -77,8 +82,8 @@ class Product(Base):
         default=ConditionEnum.NEW,
         nullable=False,
     )
-    price = Column(Float, nullable=False)
-    original_price = Column(Float, nullable=True)
+    price = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
+    original_price = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=True)
     status = Column(Enum(ProductStatusEnum), default=ProductStatusEnum.AVAILABLE, nullable=False)
     is_ai_verified = Column(Boolean, default=False)
     verification_hash = Column(String, nullable=True)
@@ -95,12 +100,23 @@ class Product(Base):
 
 class ProductVariant(Base):
     __tablename__ = "product_variants"
+    __table_args__ = (
+        CheckConstraint(
+            "price_adjustment BETWEEN -10000000.00 AND 10000000.00",
+            name="product_variants_price_adjustment_range_check",
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     sku = Column(String, unique=True, nullable=True)
     attributes = Column(JSONB, nullable=False, server_default='{}')
-    price_adjustment = Column(Float, default=0.0)
+    price_adjustment = Column(
+        Numeric(MONEY_PRECISION, MONEY_SCALE),
+        default=ZERO_MONEY,
+        server_default="0.00",
+        nullable=False,
+    )
     quantity_in_stock = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

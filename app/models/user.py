@@ -1,10 +1,11 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Boolean, DateTime, Float, ForeignKey, Integer, Enum, ARRAY, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, String, Boolean, DateTime, Float, ForeignKey, Integer, Enum, ARRAY, Numeric, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
+from app.core.money import MONEY_PRECISION, MONEY_SCALE, ZERO_MONEY
 
 class RoleEnum(str, enum.Enum):
     BUYER = "BUYER"
@@ -101,10 +102,18 @@ class SellerProfile(Base):
 
 class Wallet(Base):
     __tablename__ = "wallets"
+    __table_args__ = (
+        CheckConstraint("balance >= 0.0", name="wallets_balance_check"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True)
-    balance = Column(Float, default=0.0)
+    balance = Column(
+        Numeric(MONEY_PRECISION, MONEY_SCALE),
+        default=ZERO_MONEY,
+        server_default="0.00",
+        nullable=False,
+    )
     currency = Column(String, default="PKR")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -121,12 +130,13 @@ class Transaction(Base):
             "type",
             name="uq_transactions_reference_operation",
         ),
+        CheckConstraint("amount <> 0.0", name="transactions_amount_nonzero_check"),
     )
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     wallet_id = Column(UUID(as_uuid=True), ForeignKey("wallets.id", ondelete="CASCADE"), nullable=False)
     type = Column(Enum(TransactionTypeEnum), nullable=False)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
     reference_id = Column(UUID(as_uuid=True), nullable=True)
     reference_type = Column(String, nullable=True)
     status = Column(String, default="COMPLETED", nullable=False)

@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
+from app.core.money import money
 
 
 # ─── Cart Schemas ─────────────────────────────────────────────────────
@@ -98,8 +99,8 @@ class CartItemResponse(BaseModel):
                 seller_name=seller_name,
             )
 
-            unit_price = product.price + (variant.price_adjustment if variant else 0)
-            line_total = unit_price * item.quantity
+            unit_price = money(product.price) + money(variant.price_adjustment if variant else 0)
+            line_total = money(unit_price * item.quantity)
 
         return cls(
             id=item.id,
