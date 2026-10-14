@@ -19,6 +19,7 @@ from app.models.user import (
     User,
     Wallet,
 )
+from app.services.ledger import initialize_wallet_ledger
 
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
@@ -67,6 +68,7 @@ class OrderCompensationPostgresIntegrationTests(unittest.TestCase):
             )
             db.add_all([buyer_wallet, product])
             db.flush()
+            initialize_wallet_ledger(db, buyer_wallet)
             variant = ProductVariant(
                 product_id=product.id,
                 sku=f"refundable-{marker}",

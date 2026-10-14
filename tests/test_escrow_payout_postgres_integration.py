@@ -22,6 +22,8 @@ from app.models.user import (
     User,
     Wallet,
 )
+from app.models.ledger import LedgerEntry, LedgerEntrySideEnum
+from app.services.ledger import initialize_wallet_ledger, record_wallet_payment
 
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
@@ -60,6 +62,7 @@ class EscrowPayoutPostgresIntegrationTests(unittest.TestCase):
             )
             db.add_all([buyer, seller])
             db.flush()
+            buyer_wallet = Wallet(user_id=buyer.id, balance=1250.0)
             wallet = Wallet(user_id=seller.id, balance=0.0)
             checkout = CheckoutOrder(
                 buyer_id=buyer.id,
@@ -67,8 +70,15 @@ class EscrowPayoutPostgresIntegrationTests(unittest.TestCase):
                 payment_method=PaymentMethodEnum.WALLET,
                 idempotency_key=f"payout-checkout-{marker}",
             )
-            db.add_all([wallet, checkout])
+            db.add_all([buyer_wallet, wallet, checkout])
             db.flush()
+            initialize_wallet_ledger(db, buyer_wallet)
+            record_wallet_payment(
+                db,
+                wallet=buyer_wallet,
+                checkout_order_id=checkout.id,
+                amount=checkout.total_amount,
+            )
             seller_order = SellerOrder(
                 checkout_order_id=checkout.id,
                 seller_id=seller.id,
@@ -133,6 +143,15 @@ class EscrowPayoutPostgresIntegrationTests(unittest.TestCase):
             self.assertEqual(seller_order.status, OrderStatusEnum.COMPLETED_PAYOUT)
             self.assertEqual(len(payouts), 1)
             self.assertEqual(payouts[0].amount, 1200.0)
+            entries = (
+                db.query(LedgerEntry)
+                .filter(LedgerEntry.journal_id == payouts[0].ledger_journal_id)
+                .all()
+            )
+            debits = sum(entry.amount for entry in entries if entry.side == LedgerEntrySideEnum.DEBIT)
+            credits = sum(entry.amount for entry in entries if entry.side == LedgerEntrySideEnum.CREDIT)
+            self.assertEqual(debits, credits)
+            self.assertEqual(len(entries), 3)
 
 
 if __name__ == "__main__":

@@ -27,6 +27,11 @@ from app.models.shopping import CartSession, CartItem
 from app.models.product import Product, ProductStatusEnum, ProductVariant
 from app.models.user import User, Wallet, Transaction, TransactionTypeEnum, UserAddress
 from app.core.money import money, ZERO_MONEY
+from app.services.ledger import (
+    record_escrow_payout,
+    record_wallet_payment,
+    record_wallet_refund,
+)
 
 
 # ─── Constants ────────────────────────────────────────────────────────
@@ -380,17 +385,12 @@ def create_order_from_cart(
 
         # 8. Process wallet payment
         if payment_method == PaymentMethodEnum.WALLET:
-            wallet.balance = money(wallet.balance) - grand_total
-
-            db.add(Transaction(
-                wallet_id=wallet.id,
-                type=TransactionTypeEnum.PAYMENT,
-                amount=-grand_total,
-                reference_id=checkout_order.id,
-                reference_type="checkout_order",
-                status="COMPLETED",
-                description=f"Payment for order {checkout_order.id}",
-            ))
+            record_wallet_payment(
+                db,
+                wallet=wallet,
+                checkout_order_id=checkout_order.id,
+                amount=grand_total,
+            )
 
         # 9. Clear cart
         db.query(CartItem).filter(CartItem.cart_session_id == cart_session.id).delete()
@@ -590,16 +590,12 @@ def update_order_status(
 
             if buyer_wallet is not None:
                 refund_amount = money(seller_order.total_amount)
-                buyer_wallet.balance = money(buyer_wallet.balance + refund_amount)
-                db.add(Transaction(
-                    wallet_id=buyer_wallet.id,
-                    type=TransactionTypeEnum.REFUND,
+                record_wallet_refund(
+                    db,
+                    wallet=buyer_wallet,
+                    seller_order_id=seller_order.id,
                     amount=refund_amount,
-                    reference_id=seller_order.id,
-                    reference_type="seller_order",
-                    status="COMPLETED",
-                    description=f"Refund for seller order {seller_order.id}",
-                ))
+                )
 
             payment = _get_or_create_order_payment(db, seller_order, checkout)
             payment.status = (
@@ -697,18 +693,13 @@ def release_escrow(db: Session, seller_order_id: UUID, actor_id: UUID) -> Union[
         if not seller_wallet:
             return "Seller wallet not found"
 
-        seller_wallet.balance = money(seller_wallet.balance + seller_payout)
-
-        # Record seller credit transaction
-        db.add(Transaction(
-            wallet_id=seller_wallet.id,
-            type=TransactionTypeEnum.ESCROW_RELEASE,
-            amount=seller_payout,
-            reference_id=seller_order.id,
-            reference_type="seller_order",
-            status="COMPLETED",
-            description=f"Escrow release for order {seller_order.id}",
-        ))
+        record_escrow_payout(
+            db,
+            seller_wallet=seller_wallet,
+            seller_order_id=seller_order.id,
+            seller_amount=seller_payout,
+            platform_fee=seller_order.platform_fee,
+        )
 
         payment.status = PaymentStatusEnum.SETTLED
         payment.recorded_by_id = actor_id

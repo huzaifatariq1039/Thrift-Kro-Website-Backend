@@ -120,6 +120,7 @@ class Wallet(Base):
 
     user = relationship("User", back_populates="wallet")
     transactions = relationship("Transaction", back_populates="wallet", cascade="all, delete-orphan")
+    ledger_account = relationship("LedgerAccount", back_populates="wallet", uselist=False)
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -137,6 +138,12 @@ class Transaction(Base):
     wallet_id = Column(UUID(as_uuid=True), ForeignKey("wallets.id", ondelete="CASCADE"), nullable=False)
     type = Column(Enum(TransactionTypeEnum), nullable=False)
     amount = Column(Numeric(MONEY_PRECISION, MONEY_SCALE), nullable=False)
+    ledger_journal_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("ledger_journals.id", ondelete="RESTRICT"),
+        unique=True,
+        nullable=False,
+    )
     reference_id = Column(UUID(as_uuid=True), nullable=True)
     reference_type = Column(String, nullable=True)
     status = Column(String, default="COMPLETED", nullable=False)
@@ -144,3 +151,4 @@ class Transaction(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     wallet = relationship("Wallet", back_populates="transactions")
+    ledger_journal = relationship("LedgerJournal", back_populates="wallet_transaction")

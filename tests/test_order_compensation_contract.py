@@ -17,7 +17,7 @@ class OrderCompensationContractTests(unittest.TestCase):
     def test_wallet_compensation_is_locked_and_ledgered(self):
         source = inspect.getsource(update_order_status)
         self.assertIn("TransactionTypeEnum.REFUND", source)
-        self.assertIn("buyer_wallet.balance + refund_amount", source)
+        self.assertIn("record_wallet_refund", source)
         self.assertIn("with_for_update()", source)
 
     def test_retried_status_command_is_idempotent(self):
