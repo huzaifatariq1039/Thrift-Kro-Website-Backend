@@ -1,13 +1,26 @@
 import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
+
+from app.api.health import router as health_router
 from app.api.v1.api import api_router
+from app.core.config import settings
+from app.core.database import engine
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Startup is deliberately read-only; shutdown releases pooled connections."""
+    yield
+    engine.dispose()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="FastAPI Backend for Thrift Kro E-Commerce Marketplace",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS configuration
@@ -31,6 +44,7 @@ else:
         allow_headers=["*"],
     )
 
+app.include_router(health_router)
 app.include_router(api_router, prefix="/api/v1")
 
 

@@ -83,7 +83,7 @@ def main() -> int:
     try:
         print("Applying migrations to the empty database...")
         subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            [sys.executable, "-m", "scripts.migrate"],
             check=True,
             env=test_environment,
         )

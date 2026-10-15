@@ -19,7 +19,7 @@ class CIQualityGateTests(unittest.TestCase):
 
     def test_ci_builds_the_database_from_migrations(self):
         self.assertIn("image: postgres:16-alpine", self.workflow)
-        self.assertIn("python -m alembic upgrade head", self.workflow)
+        self.assertIn("python -m scripts.migrate", self.workflow)
 
     def test_ci_enables_postgres_integration_tests(self):
         self.assertIn("TEST_DATABASE_URL:", self.workflow)

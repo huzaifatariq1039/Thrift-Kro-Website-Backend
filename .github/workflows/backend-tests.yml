@@ -55,7 +55,7 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Build schema from migrations
-        run: python -m alembic upgrade head
+        run: python -m scripts.migrate
 
       - name: Run contract and PostgreSQL integration tests
         run: python -m unittest discover -s tests -p "test_*.py" -v
