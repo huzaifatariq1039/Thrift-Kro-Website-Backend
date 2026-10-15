@@ -37,3 +37,21 @@ def get_verification_logs(db: Session, product_id: UUID):
         .order_by(VerificationLog.created_at.desc())
         .all()
     )
+
+
+def get_successful_verification(
+    db: Session,
+    product_id: UUID,
+    verification_hash: str,
+) -> VerificationLog | None:
+    """Find the successful event that proves the product's current badge."""
+    return (
+        db.query(VerificationLog)
+        .filter(
+            VerificationLog.product_id == product_id,
+            VerificationLog.verification_hash == verification_hash,
+            VerificationLog.is_successful.is_(True),
+        )
+        .order_by(VerificationLog.created_at.desc())
+        .first()
+    )
