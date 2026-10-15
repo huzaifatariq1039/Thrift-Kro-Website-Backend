@@ -171,6 +171,9 @@ class OrderStatusHistory(Base):
     seller_order_id = Column(UUID(as_uuid=True), ForeignKey("seller_orders.id", ondelete="CASCADE"), nullable=False)
     status = Column(Enum(OrderStatusEnum), nullable=False)
     notes = Column(Text, nullable=True)
+    actor_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    request_id = Column(String(64), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     seller_order = relationship("SellerOrder", back_populates="status_history")
+    actor = relationship("User", foreign_keys=[actor_id])

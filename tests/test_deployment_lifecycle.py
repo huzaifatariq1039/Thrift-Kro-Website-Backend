@@ -52,7 +52,7 @@ class DeploymentLifecycleTests(unittest.TestCase):
 
     def test_readiness_requires_database_at_exact_migration_head(self):
         expected = expected_migration_heads()
-        self.assertEqual(expected, frozenset({"20261014_10"}))
+        self.assertEqual(expected, frozenset({"20261015_11"}))
         self.assertTrue(database_is_ready(_Database(expected)))
         self.assertFalse(database_is_ready(_Database(["20261014_09"])))
 

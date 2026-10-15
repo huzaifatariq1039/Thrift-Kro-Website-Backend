@@ -1,0 +1,53 @@
+groups:
+  - name: thrift-kro-api
+    rules:
+      - alert: ThriftKroApiTargetDown
+        expr: up{job="thrift-kro-api"} == 0
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: Thrift Kro API metrics target is down
+
+      - alert: ThriftKroApiHighErrorRate
+        expr: |
+          sum(rate(thrift_http_requests_total{status_class="5xx"}[5m]))
+          /
+          clamp_min(sum(rate(thrift_http_requests_total[5m])), 0.001)
+          > 0.02
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Thrift Kro API 5xx ratio is above 2%
+
+      - alert: ThriftKroApiHighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(thrift_http_request_duration_seconds_bucket[10m]))
+          ) > 2.5
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Thrift Kro API p95 latency is above 2.5 seconds
+
+      - alert: ThriftKroAuthenticationFailureBurst
+        expr: |
+          sum(increase(thrift_operational_events_total{
+            category="auth", outcome="failure"
+          }[5m])) > 25
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: Authentication failures exceeded the incident threshold
+
+      - alert: ThriftKroReplicaMetricsMissing
+        expr: absent_over_time(thrift_http_requests_in_flight{job="thrift-kro-api"}[5m])
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: No observability metrics have been received from the API

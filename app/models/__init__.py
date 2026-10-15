@@ -10,3 +10,4 @@ from .shopping import CartSession, CartItem, WishlistItem
 from .support import SupportTicket, TicketTypeEnum, TicketStatusEnum
 from .notification import Notification, NotificationTypeEnum
 from .auth import AuthAccount, AuthSession, AuthActionToken, AuthThrottle, AuthSecurityEvent
+from .audit import AuditEvent

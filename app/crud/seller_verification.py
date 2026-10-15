@@ -17,6 +17,7 @@ from sqlalchemy import func as sa_func
 from app.models.seller_verification import SellerVerificationRequest
 from app.models.user import SellerProfile, VerificationStatusEnum
 from app.models.product import Product, ConditionEnum
+from app.services.audit import record_audit_event
 
 # Constants
 MAX_SUBMISSIONS_PER_DAY = 3
@@ -167,6 +168,15 @@ def review_verification_request(
         elif status == VerificationStatusEnum.REJECTED:
             profile.is_verified = False
             profile.verification_status = VerificationStatusEnum.REJECTED
+
+    record_audit_event(
+        db,
+        actor_id=admin_id,
+        action="seller_verification.reviewed",
+        resource_type="seller_verification_request",
+        resource_id=request.id,
+        details={"decision": status.value},
+    )
     
     db.commit()
     db.refresh(request)

@@ -27,6 +27,8 @@ from app.models.shopping import CartSession, CartItem
 from app.models.product import Product, ProductStatusEnum, ProductVariant
 from app.models.user import User, Wallet, Transaction, TransactionTypeEnum, UserAddress
 from app.core.money import money, ZERO_MONEY
+from app.core.observability import current_request_id
+from app.services.audit import record_audit_event
 from app.services.ledger import (
     record_escrow_payout,
     record_wallet_payment,
@@ -355,6 +357,8 @@ def create_order_from_cart(
                 seller_order_id=seller_order.id,
                 status=initial_status,
                 notes="Order created",
+                actor_id=buyer_id,
+                request_id=current_request_id(),
             ))
 
             for cart_item, variant, product in sd["items"]:
@@ -396,6 +400,20 @@ def create_order_from_cart(
 
         # 9. Clear cart
         db.query(CartItem).filter(CartItem.cart_session_id == cart_session.id).delete()
+
+        record_audit_event(
+            db,
+            actor_id=buyer_id,
+            action="checkout.created",
+            resource_type="checkout_order",
+            resource_id=checkout_order.id,
+            details={
+                "payment_method": payment_method.value,
+                "currency": CURRENCY,
+                "amount": str(grand_total),
+                "seller_order_count": len(seller_data),
+            },
+        )
 
         # 10. Commit everything
         db.commit()
@@ -529,6 +547,8 @@ def update_order_status(
                 f"Allowed transitions: {[s.value for s in allowed]}"
             )
 
+        previous_status = seller_order.status
+
         checkout = seller_order.checkout_order
         if (
             seller_order.status == OrderStatusEnum.PENDING_PAYMENT
@@ -626,7 +646,21 @@ def update_order_status(
             seller_order_id=seller_order.id,
             status=new_status,
             notes=notes or f"Status updated to {new_status.value}",
+            actor_id=actor_id,
+            request_id=current_request_id(),
         ))
+
+        record_audit_event(
+            db,
+            actor_id=actor_id,
+            action="order.status_changed",
+            resource_type="seller_order",
+            resource_id=seller_order.id,
+            details={
+                "from_status": previous_status.value,
+                "to_status": new_status.value,
+            },
+        )
 
         db.commit()
         return get_seller_order(db, seller_order_id)
@@ -678,7 +712,20 @@ def release_escrow(db: Session, seller_order_id: UUID, actor_id: UUID) -> Union[
                 seller_order_id=seller_order.id,
                 status=OrderStatusEnum.COMPLETED,
                 notes="Cash on delivery collected and order completed",
+                actor_id=actor_id,
+                request_id=current_request_id(),
             ))
+            record_audit_event(
+                db,
+                actor_id=actor_id,
+                action="payment.cod_settled",
+                resource_type="seller_order",
+                resource_id=seller_order.id,
+                details={
+                    "currency": payment.currency,
+                    "amount": str(payment.amount),
+                },
+            )
             db.commit()
             return get_seller_order(db, seller_order_id)
 
@@ -713,7 +760,22 @@ def release_escrow(db: Session, seller_order_id: UUID, actor_id: UUID) -> Union[
             seller_order_id=seller_order.id,
             status=OrderStatusEnum.COMPLETED_PAYOUT,
             notes="Escrow released to seller",
+            actor_id=actor_id,
+            request_id=current_request_id(),
         ))
+
+        record_audit_event(
+            db,
+            actor_id=actor_id,
+            action="payout.released",
+            resource_type="seller_order",
+            resource_id=seller_order.id,
+            details={
+                "currency": payment.currency,
+                "amount": str(seller_payout),
+                "platform_fee": str(seller_order.platform_fee),
+            },
+        )
 
         db.commit()
         return get_seller_order(db, seller_order_id)

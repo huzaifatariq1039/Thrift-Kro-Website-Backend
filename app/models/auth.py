@@ -130,6 +130,7 @@ class AuthSecurityEvent(Base):
     success = Column(Boolean, nullable=False)
     ip_hash = Column(String(64), nullable=True)
     user_agent_hash = Column(String(64), nullable=True)
+    request_id = Column(String(64), nullable=True, index=True)
     details = Column(JSONB, nullable=False, default=dict, server_default="{}")
     created_at = Column(
         DateTime(timezone=True),

@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.observability import current_request_id, request_metrics
 from app.models.auth import (
     AuthAccount,
     AuthActionToken,
@@ -100,8 +101,14 @@ def record_security_event(
             success=success,
             ip_hash=privacy_hash(ip_address),
             user_agent_hash=privacy_hash(user_agent),
+            request_id=current_request_id(),
             details=details or {},
         )
+    )
+    request_metrics.operational_event(
+        "auth",
+        event_type,
+        "success" if success else "failure",
     )
 
 
