@@ -19,8 +19,20 @@ class ProductBase(BaseModel):
     images: List[str] = []
 
 class ProductCreate(ProductBase):
-    condition_score: Optional[int] = None
-    is_ai_verified: bool = False
+    @model_validator(mode="before")
+    @classmethod
+    def reject_server_managed_verification_fields(cls, data):
+        """Prevent listing authors from asserting product-verification results."""
+        if isinstance(data, dict):
+            forbidden = sorted(
+                {"is_ai_verified", "condition_score", "verification_hash"}.intersection(data)
+            )
+            if forbidden:
+                raise ValueError(
+                    "Product verification fields are server-managed: "
+                    + ", ".join(forbidden)
+                )
+        return data
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None

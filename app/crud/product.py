@@ -61,12 +61,12 @@ def get_products(
         
     return query.offset(skip).limit(limit).all()
 
-def create_product(db: Session, product: ProductCreate, seller_id: UUID, is_ai_verified: bool = False, condition_score: int = None):
+def create_product(db: Session, product: ProductCreate, seller_id: UUID):
     db_product = Product(
         **product.model_dump(),
         seller_id=seller_id,
-        is_ai_verified=is_ai_verified,
-        condition_score=condition_score
+        is_ai_verified=False,
+        verification_hash=None,
     )
     db.add(db_product)
     db.commit()

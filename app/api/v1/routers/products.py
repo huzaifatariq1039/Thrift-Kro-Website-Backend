@@ -88,9 +88,7 @@ def create_product(product: ProductCreate, db: Session = Depends(get_db), curren
     return crud_product.create_product(
         db=db, 
         product=product, 
-        seller_id=current_seller.id,
-        is_ai_verified=product.is_ai_verified,
-        condition_score=product.condition_score
+        seller_id=current_seller.id
     )
 
 @router.post("/import-csv", response_model=CSVImportResponse)

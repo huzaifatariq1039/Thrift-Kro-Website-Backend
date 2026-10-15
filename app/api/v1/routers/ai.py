@@ -12,12 +12,12 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.schemas.ai import AIVerificationResponse, VerificationResultResponse
+from app.schemas.ai import VerificationResultResponse
 from app.models.user import User, RoleEnum
 from app.api.deps import get_db, get_current_seller
 from app.services.cv_service import (
@@ -27,9 +27,7 @@ from app.services.cv_service import (
     decode_base64_frame,
     load_image_from_url,
     generate_verification_hash,
-    analyze_product_image,
 )
-from app.services.image_security import ImageValidationError, read_validated_image_upload
 from app.services.auth_lifecycle import AuthenticationError, validate_access_token
 import app.crud.product as crud_product
 import app.crud.verification as crud_verification
@@ -61,22 +59,15 @@ async def ws_send(websocket: WebSocket, **kwargs):
 
 # ─── Legacy Endpoint (kept for backward compatibility) ─────────────────
 
-@router.post("/verify-product", response_model=AIVerificationResponse)
+@router.post("/verify-product", status_code=503)
 async def verify_product(
-    file: UploadFile = File(...),
     current_seller: User = Depends(get_current_seller),
 ):
-    """Legacy endpoint: upload an image for simple AI analysis."""
-    try:
-        validated = await read_validated_image_upload(file)
-    except ImageValidationError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
-    try:
-        result = await analyze_product_image(validated.content)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI processing failed: {str(e)}")
+    """Truthfully reject verification while the production engine is deferred."""
+    raise HTTPException(
+        status_code=503,
+        detail="AI product verification is not available in this release",
+    )
 
 
 # ─── REST: Check Verification Status ──────────────────────────────────

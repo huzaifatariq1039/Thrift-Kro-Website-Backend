@@ -357,30 +357,3 @@ def generate_verification_hash(
     """
     payload = f"{user_id}:{product_id}:{timestamp}:{similarity_score:.4f}:{settings.SECRET_KEY}"
     return hashlib.sha256(payload.encode()).hexdigest()
-
-
-# ─── Legacy mock function (kept for backward compatibility) ───────────
-
-async def analyze_product_image(image_bytes: bytes):
-    """
-    Simulates a Computer Vision model analyzing an image.
-    Kept for backward compatibility with the POST /ai/verify-product endpoint.
-    """
-    import random
-    import time
-
-    time.sleep(1.5)
-
-    is_authentic = random.choice([True, True, True, False])
-    condition_score = random.randint(50, 98) if is_authentic else random.randint(10, 40)
-    categories = ["Sneakers", "Jacket", "Hoodie", "T-Shirt", "Jeans", "Bag"]
-    detected_category = random.choice(categories)
-    possible_flaws = ["minor scuff", "faded color", "small stain", "loose thread", "creasing"]
-    detected_flaws = random.sample(possible_flaws, k=random.randint(0, 2)) if condition_score < 90 else []
-
-    return {
-        "is_authentic": is_authentic,
-        "condition_score": condition_score,
-        "detected_category": detected_category,
-        "detected_flaws": detected_flaws,
-    }
