@@ -1,186 +1,132 @@
-"""
-Seller Verification Router.
+"""Privacy-gated seller verification endpoints.
 
-Endpoints:
-- POST /sellers/verify                           — Submit verification request
-- GET  /sellers/verification/me                   — Get my verification status
-- GET  /sellers/verification/pending              — Admin: list pending requests
-- GET  /sellers/verification/{request_id}         — Admin: view specific request
-- PUT  /sellers/verification/{request_id}         — Admin: approve or reject
+KYC collection and review remain unavailable until private object storage,
+retention, deletion, and breach-response policies have been approved. Existing
+request rows are exposed only as non-sensitive metadata.
 """
+
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
-from uuid import UUID
 
-from app.models.user import User, VerificationStatusEnum
-from app.schemas.seller_verification import (
-    SellerVerificationCreate,
-    SellerVerificationResponse,
-    SellerVerificationReview,
-    SellerVerificationStatusResponse,
+from app.api.deps import get_current_admin, get_current_seller, get_db
+from app.models.user import User
+from app.schemas.kyc import (
+    KYCRequestMetadataResponse,
+    KYCVerificationStateResponse,
 )
-from app.api.deps import get_db, get_current_seller, get_current_admin
+from app.services.audit import record_audit_event
 import app.crud.seller_verification as crud_sv
+
 
 router = APIRouter()
 
+KYC_UNAVAILABLE_DETAIL = (
+    "Seller identity verification is unavailable until private document "
+    "storage and retention policy are configured"
+)
 
-# ─── Seller Endpoints ─────────────────────────────────────────────────
 
-@router.post("/verify", response_model=SellerVerificationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/verify", status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
 def submit_verification(
-    data: SellerVerificationCreate,
-    db: Session = Depends(get_db),
     current_seller: User = Depends(get_current_seller),
 ):
-    """
-    Submit a verification request with business info and proof documents.
-    
-    Rate limit: max 3 submissions per day. After hitting the limit, 
-    a 1-week freeze period is enforced before new submissions are allowed.
-    """
-    profile = current_seller.seller_profile
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No seller profile found. Please contact support.",
-        )
-    
-    # Check if already verified
-    if profile.verification_status == VerificationStatusEnum.APPROVED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Your account is already verified.",
-        )
-    
-    # Check rate limit
-    can_submit, submissions_today, freeze_until = crud_sv.check_rate_limit(db, profile.id)
-    
-    if not can_submit:
-        if freeze_until:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"You have reached the maximum of 3 verification attempts. "
-                       f"Please try again after {freeze_until.strftime('%Y-%m-%d %H:%M UTC')}.",
-            )
-        # Check if there's a pending request
-        if profile.verification_status == VerificationStatusEnum.PENDING:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="You already have a pending verification request. Please wait for admin review.",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot submit verification request at this time.",
-        )
-    
-    request = crud_sv.create_verification_request(
-        db=db,
-        seller_profile_id=profile.id,
-        data=data.model_dump(),
+    """Fail closed instead of collecting identity data through public URLs."""
+    del current_seller
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=KYC_UNAVAILABLE_DETAIL,
     )
-    return request
 
 
-@router.get("/verification/me", response_model=SellerVerificationStatusResponse)
+@router.get("/verification/me", response_model=KYCVerificationStateResponse)
 def get_my_verification_status(
     db: Session = Depends(get_db),
     current_seller: User = Depends(get_current_seller),
-):
-    """Get the current seller's verification status, rate-limit info, and latest request."""
+) -> KYCVerificationStateResponse:
+    """Return workflow metadata without identity fields or document locations."""
     profile = current_seller.seller_profile
-    if not profile:
+    if profile is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No seller profile found.",
         )
-    
-    can_submit, submissions_today, freeze_until = crud_sv.check_rate_limit(db, profile.id)
-    
-    # Get the latest request
+
+    _, submissions_today, freeze_until = crud_sv.check_rate_limit(db, profile.id)
     requests = crud_sv.get_requests_by_seller(db, profile.id)
     latest = requests[0] if requests else None
-    
-    return SellerVerificationStatusResponse(
+
+    return KYCVerificationStateResponse(
         verification_status=profile.verification_status,
         is_verified=profile.is_verified,
         submissions_today=submissions_today,
-        max_submissions_per_day=crud_sv.MAX_SUBMISSIONS_PER_DAY,
-        can_submit=can_submit,
+        can_submit=False,
         freeze_until=freeze_until,
         latest_request=latest,
     )
 
 
-# ─── Admin Endpoints ──────────────────────────────────────────────────
-
-@router.get("/verification/pending", response_model=List[SellerVerificationResponse])
+@router.get(
+    "/verification/pending",
+    response_model=list[KYCRequestMetadataResponse],
+)
 def list_pending_requests(
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Admin: list all pending verification requests."""
-    return crud_sv.get_pending_requests(db, skip=skip, limit=limit)
+    """List non-sensitive pending-request metadata and audit the access."""
+    requests = crud_sv.get_pending_requests(db, skip=skip, limit=limit)
+    record_audit_event(
+        db,
+        actor_id=admin.id,
+        action="seller_verification.metadata_listed",
+        resource_type="seller_verification_request",
+        resource_id=None,
+        details={"result_count": len(requests)},
+    )
+    db.commit()
+    return requests
 
 
-@router.get("/verification/{request_id}", response_model=SellerVerificationResponse)
+@router.get(
+    "/verification/{request_id}",
+    response_model=KYCRequestMetadataResponse,
+)
 def get_verification_request(
     request_id: UUID,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Admin: view a specific verification request with all submitted documents."""
+    """Return non-sensitive request metadata and audit the administrator."""
     request = crud_sv.get_verification_request(db, request_id)
-    if not request:
+    if request is None:
         raise HTTPException(status_code=404, detail="Verification request not found")
+
+    record_audit_event(
+        db,
+        actor_id=admin.id,
+        action="seller_verification.metadata_viewed",
+        resource_type="seller_verification_request",
+        resource_id=request.id,
+    )
+    db.commit()
     return request
 
 
-@router.put("/verification/{request_id}", response_model=SellerVerificationResponse)
+@router.put(
+    "/verification/{request_id}",
+    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+)
 def review_verification_request(
     request_id: UUID,
-    review: SellerVerificationReview,
-    db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """
-    Admin: approve or reject a seller's verification request.
-    
-    - APPROVED: seller profile is marked as verified, seller can now list products.
-    - REJECTED: seller profile stays unverified, a rejection_reason should be provided.
-    """
-    # Validate the status
-    if review.status not in (VerificationStatusEnum.APPROVED, VerificationStatusEnum.REJECTED):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Status must be APPROVED or REJECTED.",
-        )
-    
-    if review.status == VerificationStatusEnum.REJECTED and not review.rejection_reason:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A rejection reason is required when rejecting a verification.",
-        )
-    
-    # Check the request exists and is pending
-    existing = crud_sv.get_verification_request(db, request_id)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Verification request not found")
-    if existing.status != VerificationStatusEnum.PENDING:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"This request has already been reviewed (status: {existing.status.value}).",
-        )
-    
-    result = crud_sv.review_verification_request(
-        db=db,
-        request_id=request_id,
-        admin_id=admin.id,
-        status=review.status,
-        rejection_reason=review.rejection_reason,
+    """Block review decisions when supporting evidence cannot be accessed safely."""
+    del request_id, admin
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=KYC_UNAVAILABLE_DETAIL,
     )
-    return result
