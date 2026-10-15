@@ -2,6 +2,7 @@ import os
 import threading
 import unittest
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -210,7 +211,7 @@ class OrderCompensationPostgresIntegrationTests(unittest.TestCase):
                 )
                 .count()
             )
-            self.assertEqual(wallet.balance, 5000.0 - self.refund_amount)
+            self.assertEqual(wallet.balance, Decimal("5000.00") - self.refund_amount)
             self.assertEqual(variant.quantity_in_stock, 1)
             self.assertEqual(refund_count, 0)
 

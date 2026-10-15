@@ -1,0 +1,61 @@
+name: Backend tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: thriftkro_test
+          POSTGRES_USER: thriftkro_test
+          POSTGRES_PASSWORD: thriftkro_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U thriftkro_test -d thriftkro_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://thriftkro_test:thriftkro_test@localhost:5432/thriftkro_test
+      TEST_DATABASE_URL: postgresql://thriftkro_test:thriftkro_test@localhost:5432/thriftkro_test
+      SECRET_KEY: ci-only-secret-key-with-at-least-32-characters
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Build schema from migrations
+        run: python -m alembic upgrade head
+
+      - name: Run contract and PostgreSQL integration tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
