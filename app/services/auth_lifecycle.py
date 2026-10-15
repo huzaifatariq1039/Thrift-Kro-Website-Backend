@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -275,7 +276,7 @@ def validate_access_token(db: Session, token: str) -> AuthContext:
         user_id = uuid.UUID(claims["sub"])
         session_id = uuid.UUID(claims["sid"])
         auth_version = int(claims["ver"])
-    except (JWTError, KeyError, TypeError, ValueError) as exc:
+    except (InvalidTokenError, KeyError, TypeError, ValueError) as exc:
         raise AuthenticationError("Invalid or expired access token") from exc
 
     session = db.get(AuthSession, session_id)

@@ -1,0 +1,2 @@
+# Isolated CI supply-chain scanner; not installed into the application environment.
+pip-audit==2.10.1

@@ -1,0 +1,8 @@
+# Optional seller-verification research stack; not installed by the API deployment.
+# VTON architecture/model artifacts remain intentionally out of scope.
+-r requirements.in
+
+ultralytics==8.4.106
+torch==2.13.0
+torchvision==0.28.0
+open-clip-torch==3.3.0

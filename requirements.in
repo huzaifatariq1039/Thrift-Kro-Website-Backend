@@ -1,0 +1,19 @@
+# Production API dependencies. Regenerate requirements.txt with scripts/lock_dependencies.ps1.
+fastapi==0.139.2
+uvicorn==0.51.0
+sqlalchemy==2.0.51
+psycopg2-binary==2.9.12
+alembic==1.18.5
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
+PyJWT==2.15.1
+python-multipart==0.0.32
+websockets==16.1.1
+pydantic-settings==2.14.2
+google-auth==2.56.0
+requests==2.34.2
+email-validator==2.3.0
+Pillow==12.3.0
+numpy==2.5.1
+gradio-client==2.5.0
+cloudinary==1.46.0

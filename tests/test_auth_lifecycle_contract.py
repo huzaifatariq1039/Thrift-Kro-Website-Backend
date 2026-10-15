@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import FastAPI
-from jose import jwt
+import jwt
 from pydantic import ValidationError
 
 os.environ.setdefault("SECRET_KEY", "test-only-secret-key-with-at-least-32-characters")
