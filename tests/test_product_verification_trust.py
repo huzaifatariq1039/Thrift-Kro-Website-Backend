@@ -19,10 +19,8 @@ def valid_product_payload() -> dict:
         "name": "Verified fields stay server-owned",
         "price": 1000,
         "condition": ConditionEnum.GOOD,
-        "category": "clothing",
-        "department": "unisex",
-        "size": "M",
-        "image_url": "https://media.example.test/product.jpg",
+        "images": [{"image_url": "https://media.example.test/product.jpg"}],
+        "variants": [{"attributes": {"size": "M"}, "quantity_in_stock": 1}],
     }
 
 

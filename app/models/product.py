@@ -47,7 +47,8 @@ class Category(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    subcategories = relationship("Category", backref="parent", remote_side=[id])
+    parent = relationship("Category", remote_side=[id], back_populates="subcategories")
+    subcategories = relationship("Category", back_populates="parent")
     products = relationship("Product", back_populates="category")
 
 class Product(Base):
