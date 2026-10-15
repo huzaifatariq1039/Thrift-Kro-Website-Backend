@@ -23,19 +23,36 @@ def upgrade_database() -> None:
         poolclass=NullPool,
     )
 
+    connection = engine.connect()
+    lock_acquired = False
     try:
-        with engine.begin() as connection:
+        # A session lock remains held while Alembic commits each revision.
+        # PostgreSQL requires that enum additions commit before later revisions
+        # can use the new values, so a transaction-scoped lock is unsuitable.
+        connection.execute(
+            text("SELECT set_config('lock_timeout', :timeout, false)"),
+            {"timeout": MIGRATION_LOCK_TIMEOUT},
+        )
+        connection.commit()
+        connection.execute(
+            text("SELECT pg_advisory_lock(:lock_id)"),
+            {"lock_id": MIGRATION_LOCK_ID},
+        )
+        connection.commit()
+        lock_acquired = True
+
+        alembic_config.attributes["connection"] = connection
+        command.upgrade(alembic_config, "head")
+    finally:
+        if connection.in_transaction():
+            connection.rollback()
+        if lock_acquired:
             connection.execute(
-                text("SELECT set_config('lock_timeout', :timeout, true)"),
-                {"timeout": MIGRATION_LOCK_TIMEOUT},
-            )
-            connection.execute(
-                text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                text("SELECT pg_advisory_unlock(:lock_id)"),
                 {"lock_id": MIGRATION_LOCK_ID},
             )
-            alembic_config.attributes["connection"] = connection
-            command.upgrade(alembic_config, "head")
-    finally:
+            connection.commit()
+        connection.close()
         engine.dispose()
 
 

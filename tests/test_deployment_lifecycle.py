@@ -78,9 +78,16 @@ class DeploymentLifecycleTests(unittest.TestCase):
 
     def test_release_migrations_are_serialized(self):
         source = inspect.getsource(migrate.upgrade_database)
-        self.assertIn("pg_advisory_xact_lock", source)
+        self.assertIn("pg_advisory_lock", source)
+        self.assertIn("pg_advisory_unlock", source)
+        self.assertNotIn("pg_advisory_xact_lock", source)
         self.assertIn('command.upgrade(alembic_config, "head")', source)
         self.assertIn('alembic_config.attributes["connection"]', source)
+
+        alembic_environment = (PROJECT_ROOT / "alembic" / "env.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("transaction_per_migration=True", alembic_environment)
 
     def test_railway_gates_deployment_on_migration_and_readiness(self):
         configuration = json.loads(
