@@ -1,4 +1,3 @@
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,6 +7,10 @@ from app.api.health import router as health_router
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.database import engine
+from app.core.http_security import (
+    load_http_security_policy,
+    unhandled_exception_response,
+)
 from app.core.observability import ObservabilityMiddleware
 
 
@@ -17,33 +20,31 @@ async def lifespan(_: FastAPI):
     yield
     engine.dispose()
 
+http_security = load_http_security_policy()
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="FastAPI Backend for Thrift Kro E-Commerce Marketplace",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if http_security.docs_enabled else None,
+    redoc_url="/redoc" if http_security.docs_enabled else None,
+    openapi_url="/openapi.json" if http_security.docs_enabled else None,
 )
+app.add_exception_handler(Exception, unhandled_exception_response)
 
-# CORS configuration
-raw_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").strip()
-
-if raw_allowed_origins == "*":
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-else:
-    allowed_origins = [origin.strip() for origin in raw_allowed_origins.split(",") if origin.strip()]
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allowed_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(http_security.allowed_origins),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key",
+        "X-Request-ID",
+    ],
+)
 
 app.add_middleware(ObservabilityMiddleware)
 

@@ -205,6 +205,7 @@ class ObservabilityMiddleware:
         headers = dict(scope.get("headers") or [])
         raw_request_id = headers.get(REQUEST_ID_HEADER, b"").decode("ascii", errors="ignore")
         request_id = _validated_request_id(raw_request_id)
+        scope["request_id"] = request_id
         token = _request_id.set(request_id)
         method = str(scope.get("method", "UNKNOWN")).upper()
         status_code = 500

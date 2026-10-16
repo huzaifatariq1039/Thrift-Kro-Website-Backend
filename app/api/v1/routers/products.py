@@ -7,6 +7,7 @@ Seller:  POST /products, PUT /products/{id}, DELETE /products/{id},
 """
 import csv
 import io
+import logging
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -24,6 +25,7 @@ from app.api.deps import get_db, get_current_verified_seller, get_current_seller
 from app.api.pagination import PageLimit, PageOffset
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Expected CSV columns (order matters for the template)
 CSV_COLUMNS = [
@@ -290,14 +292,18 @@ async def import_products_csv(
                     product_name=product_data["name"],
                     product_id=db_product.id,
                 ))
-        except Exception as e:
+        except Exception as exc:
+            logger.error(
+                "CSV product import failed",
+                extra={"error_type": type(exc).__name__},
+            )
             # If bulk insert fails, mark all valid rows as failed
             for product_data in valid_products:
                 results.append(CSVImportRowResult(
                     row_number=product_data["_row_num"],
                     success=False,
                     product_name=product_data["name"],
-                    error=f"Database error: {str(e)}",
+                    error="Product import could not be completed. No rows were created.",
                 ))
 
     # Sort results by row number

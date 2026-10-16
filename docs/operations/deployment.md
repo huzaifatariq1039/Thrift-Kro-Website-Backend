@@ -10,7 +10,15 @@ Application processes must never create tables, seed accounts, or run migrations
 4. Record a production backup and its restore-verification result.
 5. Promote the exact tested commit to production. Do not rebuild from a different branch or working tree.
 
-Required runtime variables include `DATABASE_URL`, a unique `SECRET_KEY`, and explicit production `ALLOWED_ORIGINS`. Service credentials belong in Railway variables, never source control.
+Required runtime variables include `DATABASE_URL`, a unique `SECRET_KEY`,
+`APP_ENV=production`, and explicit production `ALLOWED_ORIGINS`. Service
+credentials belong in Railway variables, never source control. Production
+startup fails if origins are missing or contain `*`; Swagger, ReDoc, and the
+OpenAPI document are disabled in production. Missing origins deny all
+cross-origin browser access in non-production environments. Development must
+explicitly configure its local frontend origins. API docs are disabled by
+default; set `ENABLE_API_DOCS=true` only in a controlled non-production
+environment when they are needed.
 
 ## Release sequence
 

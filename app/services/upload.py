@@ -53,5 +53,8 @@ async def upload_image_to_cloudinary(file: UploadFile) -> str:
             raise RuntimeError("Storage provider returned no secure URL")
         return secure_url
     except Exception as exc:
-        logger.exception("Image upload to storage failed")
+        logger.error(
+            "Image upload to storage failed",
+            extra={"error_type": type(exc).__name__},
+        )
         raise HTTPException(status_code=502, detail="Image storage is temporarily unavailable") from exc

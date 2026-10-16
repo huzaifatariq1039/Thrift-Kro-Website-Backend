@@ -118,17 +118,20 @@ async def generate_vton(
     except HTTPException:
         raise  # re-raise FastAPI HTTP exceptions as-is
     except Exception as exc:
-        logger.exception("VTON generation failed")
+        logger.error(
+            "VTON generation failed",
+            extra={"error_type": type(exc).__name__},
+        )
         err_str = str(exc).lower()
         if "timeout" in err_str or "time out" in err_str:
             detail_msg = "The AI Engine took too long to respond. Please try again later."
         else:
-            detail_msg = f"VTON generation failed: {str(exc)}"
+            detail_msg = "Virtual try-on is temporarily unavailable. Please try again later."
             
         raise HTTPException(
-            status_code=500,
+            status_code=502,
             detail=detail_msg,
-        )
+        ) from exc
     finally:
         # ---- cleanup temp upload files ----
         if temp_person_path and os.path.exists(temp_person_path):
