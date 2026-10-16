@@ -4,6 +4,7 @@ from uuid import UUID
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
+from google.auth.exceptions import TransportError
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 from sqlalchemy import func
@@ -42,10 +43,46 @@ from app.services.auth_lifecycle import (
     rotate_refresh_token,
     utcnow,
 )
+from app.services.provider_resilience import (
+    ProviderCircuitBreaker,
+    ProviderCircuitOpenError,
+    RetryPolicy,
+    call_with_resilience,
+    is_transient_requests_error,
+)
 
 
 router = APIRouter()
 _DUMMY_PASSWORD_HASH = get_password_hash("InvalidPassword1!")
+_GOOGLE_IDENTITY_CIRCUIT = ProviderCircuitBreaker(
+    "google_identity",
+    failure_threshold=5,
+    recovery_seconds=30,
+)
+_GOOGLE_RETRY_POLICY = RetryPolicy(max_attempts=2, base_delay_seconds=0.1)
+
+
+class _BoundedGoogleRequest(google_requests.Request):
+    """Cap certificate-fetch latency used while validating Google ID tokens."""
+
+    def __call__(
+        self,
+        url,
+        method="GET",
+        body=None,
+        headers=None,
+        timeout=5,
+        **kwargs,
+    ):
+        bounded_timeout = min(timeout, 5) if isinstance(timeout, (int, float)) else 5
+        return super().__call__(
+            url=url,
+            method=method,
+            body=body,
+            headers=headers,
+            timeout=bounded_timeout,
+            **kwargs,
+        )
 
 
 def _request_identity(request: Request) -> tuple[str, str]:
@@ -74,6 +111,41 @@ def _token_response(pair) -> AuthTokenResponse:
         access_token=pair.access_token,
         refresh_token=pair.refresh_token,
         expires_in=pair.expires_in,
+    )
+
+
+def _fetch_google_userinfo(access_token: str) -> dict:
+    def request_userinfo() -> dict:
+        response = requests.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=5,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    return call_with_resilience(
+        request_userinfo,
+        circuit=_GOOGLE_IDENTITY_CIRCUIT,
+        retry_if=is_transient_requests_error,
+        policy=_GOOGLE_RETRY_POLICY,
+    )
+
+
+def _is_transient_google_error(exc: Exception) -> bool:
+    return isinstance(exc, TransportError) or is_transient_requests_error(exc)
+
+
+def _verify_google_id_token(raw_token: str) -> dict:
+    return call_with_resilience(
+        lambda: id_token.verify_oauth2_token(
+            raw_token,
+            _BoundedGoogleRequest(),
+            settings.GOOGLE_CLIENT_ID,
+        ),
+        circuit=_GOOGLE_IDENTITY_CIRCUIT,
+        retry_if=_is_transient_google_error,
+        policy=_GOOGLE_RETRY_POLICY,
     )
 
 
@@ -253,20 +325,45 @@ def google_auth(
 
     try:
         if body.id_token.count(".") == 2:
-            idinfo = id_token.verify_oauth2_token(
-                body.id_token,
-                google_requests.Request(),
-                settings.GOOGLE_CLIENT_ID,
-            )
+            idinfo = _verify_google_id_token(body.id_token)
         else:
-            response = requests.get(
-                "https://www.googleapis.com/oauth2/v3/userinfo",
-                headers={"Authorization": f"Bearer {body.id_token}"},
-                timeout=5,
-            )
-            response.raise_for_status()
-            idinfo = response.json()
-    except (ValueError, requests.RequestException):
+            idinfo = _fetch_google_userinfo(body.id_token)
+    except ProviderCircuitOpenError as exc:
+        record_security_event(
+            db,
+            "google_login_failed",
+            False,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            details={"reason": "provider_unavailable"},
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Google authentication is temporarily unavailable",
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
+    except (requests.RequestException, TransportError) as exc:
+        provider_unavailable = _is_transient_google_error(exc)
+        reason = "provider_unavailable" if provider_unavailable else "invalid_provider_token"
+        record_security_event(
+            db,
+            "google_login_failed",
+            False,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            details={"reason": reason},
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=503 if provider_unavailable else 401,
+            detail=(
+                "Google authentication is temporarily unavailable"
+                if provider_unavailable
+                else "Invalid Google token"
+            ),
+        ) from exc
+    except ValueError as exc:
         record_security_event(
             db,
             "google_login_failed",
@@ -276,7 +373,7 @@ def google_auth(
             details={"reason": "invalid_provider_token"},
         )
         db.commit()
-        raise HTTPException(status_code=401, detail="Invalid Google token")
+        raise HTTPException(status_code=401, detail="Invalid Google token") from exc
 
     google_id = idinfo.get("sub")
     email = idinfo.get("email")

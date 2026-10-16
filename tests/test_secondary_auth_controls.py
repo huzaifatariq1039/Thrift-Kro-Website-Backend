@@ -17,10 +17,13 @@ class SecondaryAuthControlTests(unittest.TestCase):
     def test_login_and_google_auth_enforce_secondary_identity_controls(self):
         login_source = inspect.getsource(auth.login)
         google_source = inspect.getsource(auth.google_auth)
+        google_userinfo_source = inspect.getsource(auth._fetch_google_userinfo)
+        google_request_source = inspect.getsource(auth._BoundedGoogleRequest)
 
         self.assertIn("not user.is_active", login_source)
         self.assertIn("email_verified_at", login_source)
-        self.assertIn("timeout=5", google_source)
+        self.assertIn("timeout=5", google_userinfo_source)
+        self.assertIn("bounded_timeout", google_request_source)
         self.assertIn("not email_verified", google_source)
         self.assertIn("not user.is_active", google_source)
 
