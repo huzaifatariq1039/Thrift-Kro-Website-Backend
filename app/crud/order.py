@@ -459,7 +459,11 @@ def get_order(db: Session, order_id: UUID) -> Optional[CheckoutOrder]:
 
 
 def get_orders_by_user(
-    db: Session, user_id: UUID, is_seller: bool = False
+    db: Session,
+    user_id: UUID,
+    is_seller: bool = False,
+    skip: int = 0,
+    limit: int = 50,
 ) -> list:
     """Get orders for a user. Buyers see CheckoutOrders, sellers see SellerOrders."""
     if is_seller:
@@ -472,7 +476,9 @@ def get_orders_by_user(
                 joinedload(SellerOrder.checkout_order),
             )
             .filter(SellerOrder.seller_id == user_id)
-            .order_by(SellerOrder.created_at.desc())
+            .order_by(SellerOrder.created_at.desc(), SellerOrder.id.desc())
+            .offset(skip)
+            .limit(limit)
             .all()
         )
     else:
@@ -485,7 +491,9 @@ def get_orders_by_user(
                 .joinedload(SellerOrder.seller),
             )
             .filter(CheckoutOrder.buyer_id == user_id)
-            .order_by(CheckoutOrder.created_at.desc())
+            .order_by(CheckoutOrder.created_at.desc(), CheckoutOrder.id.desc())
+            .offset(skip)
+            .limit(limit)
             .all()
         )
 

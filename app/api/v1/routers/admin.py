@@ -2,6 +2,7 @@
 Admin Super-Dashboard Router.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from app.api.pagination import PageLimit, PageOffset
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
@@ -32,6 +33,8 @@ def get_dashboard_stats(
 
 @router.get("/orders", response_model=List[OrderResponse])
 def get_all_orders(
+    skip: PageOffset = 0,
+    limit: PageLimit = 100,
     db: Session = Depends(get_db),
     admin_user: User = Depends(get_current_admin)
 ):
@@ -39,13 +42,19 @@ def get_all_orders(
     Get all orders on the platform for Escrow management.
     Only accessible by ADMIN.
     """
-    return db.query(CheckoutOrder).order_by(CheckoutOrder.created_at.desc()).all()
+    return (
+        db.query(CheckoutOrder)
+        .order_by(CheckoutOrder.created_at.desc(), CheckoutOrder.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 
 @router.get("/tickets", response_model=List[TicketResponse])
 def list_all_tickets(
-    skip: int = 0,
-    limit: int = 100,
+    skip: PageOffset = 0,
+    limit: PageLimit = 100,
     db: Session = Depends(get_db),
     admin_user: User = Depends(get_current_admin)
 ):

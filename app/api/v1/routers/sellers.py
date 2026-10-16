@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin, get_current_seller, get_db
+from app.api.pagination import PageLimit, PageOffset
 from app.models.user import User
 from app.schemas.kyc import (
     KYCRequestMetadataResponse,
@@ -72,8 +73,8 @@ def get_my_verification_status(
     response_model=list[KYCRequestMetadataResponse],
 )
 def list_pending_requests(
-    skip: int = 0,
-    limit: int = 50,
+    skip: PageOffset = 0,
+    limit: PageLimit = 50,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):

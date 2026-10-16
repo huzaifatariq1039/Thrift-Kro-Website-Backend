@@ -32,20 +32,30 @@ def _ensure_unique_slug(db: Session, slug: str, exclude_id: UUID = None) -> str:
         counter += 1
 
 
-def get_categories(db: Session, include_inactive: bool = False) -> List[Category]:
-    """Get all top-level categories (no parent) with their subcategories."""
+def get_categories(
+    db: Session,
+    include_inactive: bool = False,
+    skip: int = 0,
+    limit: int = 100,
+) -> List[Category]:
+    """Get a bounded page of top-level categories with their subcategories."""
     query = db.query(Category).filter(Category.parent_id == None)  # noqa: E711
     if not include_inactive:
         query = query.filter(Category.is_active == True)  # noqa: E712
-    return query.order_by(Category.name.asc()).all()
+    return query.order_by(Category.name.asc(), Category.id.asc()).offset(skip).limit(limit).all()
 
 
-def get_all_categories(db: Session, include_inactive: bool = False) -> List[Category]:
-    """Get all categories (flat list)."""
+def get_all_categories(
+    db: Session,
+    include_inactive: bool = False,
+    skip: int = 0,
+    limit: int = 100,
+) -> List[Category]:
+    """Get a bounded page of categories as a flat list."""
     query = db.query(Category)
     if not include_inactive:
         query = query.filter(Category.is_active == True)  # noqa: E712
-    return query.order_by(Category.name.asc()).all()
+    return query.order_by(Category.name.asc(), Category.id.asc()).offset(skip).limit(limit).all()
 
 
 def get_category(db: Session, category_id: UUID) -> Optional[Category]:

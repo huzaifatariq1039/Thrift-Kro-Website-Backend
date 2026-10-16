@@ -19,14 +19,24 @@ class FakeHistoryQuery:
     def __init__(self, messages):
         self.messages = messages
         self.filters = []
-        self.ordering = None
+        self.ordering = ()
+        self.offset_value = None
+        self.limit_value = None
 
     def filter(self, *clauses):
         self.filters.extend(clauses)
         return self
 
-    def order_by(self, ordering):
+    def order_by(self, *ordering):
         self.ordering = ordering
+        return self
+
+    def offset(self, value):
+        self.offset_value = value
+        return self
+
+    def limit(self, value):
+        self.limit_value = value
         return self
 
     def all(self):
@@ -72,7 +82,12 @@ class ChatHistoryContractTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(self.db.history_query.filters), 1)
-        self.assertEqual(str(self.db.history_query.ordering), "messages.created_at ASC")
+        self.assertEqual(
+            tuple(map(str, self.db.history_query.ordering)),
+            ("messages.created_at ASC", "messages.id ASC"),
+        )
+        self.assertEqual(self.db.history_query.offset_value, 0)
+        self.assertEqual(self.db.history_query.limit_value, 50)
         self.assertEqual(response.json()[0]["timestamp"], "2026-10-16T09:30:00Z")
         self.assertNotIn("created_at", response.json()[0])
 

@@ -20,8 +20,13 @@ def create_review(
     return create_verified_review(db, review, buyer_id)
 
 
-def get_reviews_by_product(db: Session, product_id: UUID) -> List[Review]:
-    """Return trusted reviews only, newest first."""
+def get_reviews_by_product(
+    db: Session,
+    product_id: UUID,
+    skip: int = 0,
+    limit: int = 50,
+) -> List[Review]:
+    """Return a bounded page of trusted reviews, newest first."""
     return (
         db.query(Review)
         .filter(
@@ -29,6 +34,8 @@ def get_reviews_by_product(db: Session, product_id: UUID) -> List[Review]:
             Review.is_verified_purchase.is_(True),
         )
         .order_by(Review.created_at.desc(), Review.id.desc())
+        .offset(skip)
+        .limit(limit)
         .all()
     )
 

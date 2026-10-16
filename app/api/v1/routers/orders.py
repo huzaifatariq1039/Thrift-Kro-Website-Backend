@@ -15,6 +15,7 @@ from app.models.user import User, RoleEnum
 from app.models.order import OrderStatusEnum
 import app.crud.order as crud_order
 from app.api.deps import get_db, get_current_active_user, get_current_buyer, get_current_seller
+from app.api.pagination import PageLimit, PageOffset
 
 router = APIRouter()
 
@@ -54,20 +55,36 @@ def checkout(
 
 @router.get("/", response_model=List[OrderResponse])
 def get_my_orders(
+    skip: PageOffset = 0,
+    limit: PageLimit = 50,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Get all orders for the current buyer."""
-    return crud_order.get_orders_by_user(db=db, user_id=current_user.id, is_seller=False)
+    """Get a bounded page of orders for the current buyer."""
+    return crud_order.get_orders_by_user(
+        db=db,
+        user_id=current_user.id,
+        is_seller=False,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.get("/seller", response_model=List[SellerOrderSchema])
 def get_seller_orders(
+    skip: PageOffset = 0,
+    limit: PageLimit = 50,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_seller),
 ):
-    """Get all orders received by the current seller."""
-    return crud_order.get_orders_by_user(db=db, user_id=current_user.id, is_seller=True)
+    """Get a bounded page of orders received by the current seller."""
+    return crud_order.get_orders_by_user(
+        db=db,
+        user_id=current_user.id,
+        is_seller=True,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.get("/{order_id}", response_model=OrderResponse)

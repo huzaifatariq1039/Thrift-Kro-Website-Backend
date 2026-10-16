@@ -8,6 +8,7 @@ from typing import List
 from app.models.user import User
 from app.schemas.support import TicketCreate, TicketResponse
 from app.api.deps import get_db, get_current_active_user
+from app.api.pagination import PageLimit, PageOffset
 import app.crud.support as crud_support
 
 router = APIRouter()
@@ -27,8 +28,8 @@ def create_support_ticket(
 
 @router.get("/tickets/me", response_model=List[TicketResponse])
 def get_my_tickets(
-    skip: int = 0,
-    limit: int = 50,
+    skip: PageOffset = 0,
+    limit: PageLimit = 50,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):

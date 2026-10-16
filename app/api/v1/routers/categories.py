@@ -12,6 +12,7 @@ from uuid import UUID
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
 from app.models.user import User
 from app.api.deps import get_db, get_current_admin
+from app.api.pagination import PageLimit, PageOffset
 import app.crud.category as crud_category
 
 router = APIRouter()
@@ -21,6 +22,8 @@ router = APIRouter()
 def list_categories(
     flat: bool = False,
     include_inactive: bool = False,
+    skip: PageOffset = 0,
+    limit: PageLimit = 100,
     db: Session = Depends(get_db),
 ):
     """
@@ -28,8 +31,18 @@ def list_categories(
     Set flat=true for a flat list of all categories.
     """
     if flat:
-        return crud_category.get_all_categories(db, include_inactive=include_inactive)
-    return crud_category.get_categories(db, include_inactive=include_inactive)
+        return crud_category.get_all_categories(
+            db,
+            include_inactive=include_inactive,
+            skip=skip,
+            limit=limit,
+        )
+    return crud_category.get_categories(
+        db,
+        include_inactive=include_inactive,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.get("/{category_id}", response_model=CategoryResponse)

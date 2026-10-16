@@ -21,6 +21,7 @@ from app.models.user import User
 from app.models.product import ConditionEnum
 import app.crud.product as crud_product
 from app.api.deps import get_db, get_current_verified_seller, get_current_seller
+from app.api.pagination import PageLimit, PageOffset
 
 router = APIRouter()
 
@@ -35,8 +36,8 @@ VALID_CONDITIONS = {e.value for e in ConditionEnum}
 
 @router.get("/", response_model=List[ProductResponse])
 def get_products(
-    skip: int = 0,
-    limit: int = 100,
+    skip: PageOffset = 0,
+    limit: PageLimit = 100,
     category_id: Optional[UUID] = None,
     category: Optional[str] = None,
     brand: Optional[str] = None,
@@ -68,8 +69,8 @@ def get_products(
 
 @router.get("/seller/me", response_model=List[ProductResponse])
 def get_my_products(
-    skip: int = 0,
-    limit: int = 100,
+    skip: PageOffset = 0,
+    limit: PageLimit = 100,
     db: Session = Depends(get_db),
     current_seller: User = Depends(get_current_seller),
 ):

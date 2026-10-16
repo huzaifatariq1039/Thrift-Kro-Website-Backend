@@ -6,6 +6,7 @@ from typing import Dict, List, Set
 from uuid import UUID
 
 from app.api.deps import get_current_active_user, get_db
+from app.api.pagination import PageLimit, PageOffset
 from app.models.message import Message
 from app.models.order import SellerOrder
 from app.models.user import User
@@ -139,10 +140,16 @@ async def websocket_endpoint(
         manager.disconnect(websocket, current_user.id)
 
 @router.get("/history/{contact_id}", response_model=List[MessageResponse])
-def get_chat_history(contact_id: UUID, db: Session = Depends(get_db), current_user = Depends(get_current_active_user)):
+def get_chat_history(
+    contact_id: UUID,
+    skip: PageOffset = 0,
+    limit: PageLimit = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
     messages = db.query(Message).filter(
         ((Message.sender_id == current_user.id) & (Message.receiver_id == contact_id)) |
         ((Message.sender_id == contact_id) & (Message.receiver_id == current_user.id))
-    ).order_by(Message.created_at.asc()).all()
+    ).order_by(Message.created_at.asc(), Message.id.asc()).offset(skip).limit(limit).all()
     
     return messages
