@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -7,6 +7,15 @@ from app.core.database import Base
 
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (
+        Index(
+            "idx_messages_conversation",
+            "sender_id",
+            "receiver_id",
+            "created_at",
+        ),
+        Index("idx_messages_seller_order", "seller_order_id"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     sender_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)

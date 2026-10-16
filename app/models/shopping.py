@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, ForeignKey, DateTime, Integer
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -18,6 +18,16 @@ class CartSession(Base):
 
 class CartItem(Base):
     __tablename__ = "cart_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "cart_session_id",
+            "product_variant_id",
+            name="uq_cart_items_session_variant",
+        ),
+        CheckConstraint("quantity > 0", name="cart_items_quantity_check"),
+        Index("idx_cart_items_session_added", "cart_session_id", "added_at"),
+        Index("idx_cart_items_variant", "product_variant_id"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     cart_session_id = Column(UUID(as_uuid=True), ForeignKey("cart_sessions.id", ondelete="CASCADE"), nullable=False)
@@ -30,9 +40,18 @@ class CartItem(Base):
 
 class WishlistItem(Base):
     __tablename__ = "wishlist_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "product_id",
+            name="uq_wishlist_items_user_product",
+        ),
+        Index("idx_wishlist_items_user_added", "user_id", "added_at"),
+        Index("idx_wishlist_items_product", "product_id"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     added_at = Column(DateTime(timezone=True), server_default=func.now())
 

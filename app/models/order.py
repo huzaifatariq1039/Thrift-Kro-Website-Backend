@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import CheckConstraint, Column, String, ForeignKey, Enum, Integer, Numeric, DateTime, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, String, ForeignKey, Enum, Index, Integer, Numeric, DateTime, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -43,6 +43,7 @@ class CheckoutOrder(Base):
             "total_amount >= 0.0",
             name="checkout_orders_total_amount_check",
         ),
+        Index("idx_checkout_orders_buyer_created", "buyer_id", "created_at", "id"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
@@ -72,6 +73,9 @@ class SellerOrder(Base):
             "total_amount = subtotal + shipping_fee + platform_fee",
             name="seller_orders_total_components_check",
         ),
+        Index("idx_seller_orders_checkout", "checkout_order_id"),
+        Index("idx_seller_orders_seller", "seller_id", "status"),
+        Index("idx_seller_orders_seller_created", "seller_id", "created_at", "id"),
     )
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
@@ -145,6 +149,8 @@ class OrderItem(Base):
             name="order_items_price_at_purchase_check",
         ),
         CheckConstraint("quantity > 0", name="order_items_quantity_check"),
+        Index("idx_order_items_seller_order", "seller_order_id"),
+        Index("idx_order_items_variant", "product_variant_id"),
     )
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
@@ -166,6 +172,13 @@ class OrderItem(Base):
 
 class OrderStatusHistory(Base):
     __tablename__ = "order_status_history"
+    __table_args__ = (
+        Index(
+            "idx_order_status_history_seller_created",
+            "seller_order_id",
+            "created_at",
+        ),
+    )
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     seller_order_id = Column(UUID(as_uuid=True), ForeignKey("seller_orders.id", ondelete="CASCADE"), nullable=False)

@@ -15,7 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text as sa_text
 from app.core.database import Base
 from app.core.money import MONEY_PRECISION, MONEY_SCALE, ZERO_MONEY
 
@@ -111,6 +111,11 @@ class ProductVariant(Base):
             "price_adjustment BETWEEN -10000000.00 AND 10000000.00",
             name="product_variants_price_adjustment_range_check",
         ),
+        CheckConstraint(
+            "quantity_in_stock >= 0",
+            name="product_variants_quantity_in_stock_check",
+        ),
+        Index("idx_product_variants_product_active", "product_id", "is_active"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
@@ -133,6 +138,15 @@ class ProductVariant(Base):
     
 class ProductImage(Base):
     __tablename__ = "product_images"
+    __table_args__ = (
+        Index(
+            "uq_product_images_primary_per_product",
+            "product_id",
+            unique=True,
+            postgresql_where=sa_text("is_primary IS TRUE"),
+        ),
+        Index("idx_product_images_product_display", "product_id", "display_order"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
@@ -145,6 +159,9 @@ class ProductImage(Base):
 
 class ProductTag(Base):
     __tablename__ = "product_tags"
+    __table_args__ = (
+        Index("idx_product_tags_product", "product_id"),
+    )
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)

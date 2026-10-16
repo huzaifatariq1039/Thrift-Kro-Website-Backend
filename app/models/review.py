@@ -27,6 +27,7 @@ class Review(Base):
             unique=True,
             postgresql_where=text("order_item_id IS NOT NULL"),
         ),
+        Index("idx_reviews_product_created", "product_id", "created_at", "id"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
