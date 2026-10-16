@@ -1,17 +1,47 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime, Enum, JSON, Boolean
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    JSON,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from app.core.database import Base
-from app.models.user import VerificationStatusEnum, BusinessTypeEnum
+from app.models.user import BusinessTypeEnum, VerificationStatusEnum
 
 
 class SellerVerificationRequest(Base):
     __tablename__ = "seller_verification_requests"
+    __table_args__ = (
+        Index(
+            "uq_seller_verification_one_pending",
+            "seller_profile_id",
+            unique=True,
+            postgresql_where=text("status = 'PENDING'"),
+        ),
+        Index(
+            "idx_seller_verification_seller_created",
+            "seller_profile_id",
+            "created_at",
+            "id",
+        ),
+    )
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    seller_profile_id = Column(UUID(as_uuid=True), ForeignKey("seller_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    seller_profile_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("seller_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     
     # Business information snapshot
     business_name = Column(String, nullable=False)
@@ -30,9 +60,17 @@ class SellerVerificationRequest(Base):
     ai_verified = Column(Boolean, default=False)
     
     # Review
-    status = Column(Enum(VerificationStatusEnum), default=VerificationStatusEnum.PENDING, nullable=False)
+    status = Column(
+        Enum(VerificationStatusEnum),
+        default=VerificationStatusEnum.PENDING,
+        nullable=False,
+    )
     rejection_reason = Column(String, nullable=True)
-    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_by = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     
     # Timestamps
@@ -40,5 +78,8 @@ class SellerVerificationRequest(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
-    seller_profile = relationship("SellerProfile", back_populates="verification_requests")
+    seller_profile = relationship(
+        "SellerProfile",
+        back_populates="verification_requests",
+    )
     reviewer = relationship("User", foreign_keys=[reviewed_by])

@@ -79,8 +79,8 @@ class KYCPrivacyGateTests(unittest.TestCase):
             ),
             patch.object(
                 sellers.crud_sv,
-                "get_requests_by_seller",
-                return_value=[request],
+                "get_latest_request_by_seller",
+                return_value=request,
             ),
         ):
             result = sellers.get_my_verification_status(db=object(), current_seller=seller)

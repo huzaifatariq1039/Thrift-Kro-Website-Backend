@@ -55,8 +55,7 @@ def get_my_verification_status(
         )
 
     _, submissions_today, freeze_until = crud_sv.check_rate_limit(db, profile.id)
-    requests = crud_sv.get_requests_by_seller(db, profile.id)
-    latest = requests[0] if requests else None
+    latest = crud_sv.get_latest_request_by_seller(db, profile.id)
 
     return KYCVerificationStateResponse(
         verification_status=profile.verification_status,
