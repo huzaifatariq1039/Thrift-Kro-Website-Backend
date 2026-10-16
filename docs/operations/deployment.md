@@ -20,6 +20,24 @@ explicitly configure its local frontend origins. API docs are disabled by
 default; set `ENABLE_API_DOCS=true` only in a controlled non-production
 environment when they are needed.
 
+### Capacity limits
+
+The current chat broadcaster is process-local. Run exactly one web worker and
+one application replica, and declare that topology with `WEB_CONCURRENCY=1`
+and `APP_REPLICA_COUNT=1`. Startup is intentionally rejected for a larger
+declared topology because messages could otherwise disappear between workers.
+Introduce and test a shared pub/sub backplane before increasing either value.
+
+Each process uses a bounded SQLAlchemy pool. The defaults are
+`DATABASE_POOL_SIZE=5`, `DATABASE_MAX_OVERFLOW=5`,
+`DATABASE_POOL_TIMEOUT_SECONDS=30`, and
+`DATABASE_POOL_RECYCLE_SECONDS=1800`. Set `DATABASE_CONNECTION_BUDGET` to the
+maximum connections allocated to all application processes in this deployment.
+Startup rejects configurations where
+`(pool size + overflow) * workers * replicas` exceeds that budget. Keep
+additional PostgreSQL capacity reserved for migrations, administration,
+monitoring, and recovery operations.
+
 ## Release sequence
 
 Railway runs `python -m scripts.migrate` as its pre-deploy command. The command:

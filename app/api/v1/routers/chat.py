@@ -7,6 +7,8 @@ from uuid import UUID
 
 from app.api.deps import get_current_active_user, get_db
 from app.api.pagination import PageLimit, PageOffset
+from app.core.database import runtime_capacity
+from app.core.runtime_capacity import assert_local_chat_topology
 from app.models.message import Message
 from app.models.order import SellerOrder
 from app.models.user import User
@@ -39,6 +41,7 @@ def authorize_order_conversation(
 
 class ConnectionManager:
     def __init__(self):
+        assert_local_chat_topology(runtime_capacity)
         self.active_connections: Dict[str, Set[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, user_id: UUID):
@@ -55,7 +58,10 @@ class ConnectionManager:
 
     async def send_personal_message(self, message: dict, user_id: UUID):
         for connection in tuple(self.active_connections.get(str(user_id), set())):
-            await connection.send_json(message)
+            try:
+                await connection.send_json(message)
+            except (WebSocketDisconnect, RuntimeError, OSError):
+                self.disconnect(connection, user_id)
 
 manager = ConnectionManager()
 

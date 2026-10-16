@@ -52,7 +52,7 @@ class DeploymentLifecycleTests(unittest.TestCase):
 
     def test_readiness_requires_database_at_exact_migration_head(self):
         expected = expected_migration_heads()
-        self.assertEqual(expected, frozenset({"20261016_13"}))
+        self.assertEqual(expected, frozenset({"20261016_14"}))
         self.assertTrue(database_is_ready(_Database(expected)))
         self.assertFalse(database_is_ready(_Database(["20261014_09"])))
 
@@ -96,6 +96,7 @@ class DeploymentLifecycleTests(unittest.TestCase):
         deploy = configuration["deploy"]
         self.assertEqual(deploy["preDeployCommand"], ["python -m scripts.migrate"])
         self.assertEqual(deploy["healthcheckPath"], "/health/ready")
+        self.assertIn("--workers 1", deploy["startCommand"])
         self.assertIn("--timeout-graceful-shutdown 30", deploy["startCommand"])
 
 

@@ -2,17 +2,19 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 from .config import settings
+from .runtime_capacity import load_runtime_capacity
 
-# Optimized SQLAlchemy Engine for High-Concurrency API Workloads
+runtime_capacity = load_runtime_capacity()
+
 engine = create_engine(
     settings.SQLALCHEMY_DATABASE_URI,
-    pool_pre_ping=True,      # Tests connection liveness before reuse to prevent stale connection errors
-    pool_size=15,             # Base pool of persistent database connections
-    max_overflow=25,          # Maximum temporary connections allowed under burst load
-    pool_recycle=1800,        # Recycles connections every 30 mins to avoid firewall/DB timeout drops
+    pool_pre_ping=True,
+    pool_size=runtime_capacity.database_pool_size,
+    max_overflow=runtime_capacity.database_max_overflow,
+    pool_timeout=runtime_capacity.database_pool_timeout_seconds,
+    pool_recycle=runtime_capacity.database_pool_recycle_seconds,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
-

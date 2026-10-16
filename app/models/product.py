@@ -67,6 +67,18 @@ class Product(Base):
             postgresql_using="gin",
             postgresql_ops={"name": "gin_trgm_ops"},
         ),
+        Index(
+            "idx_products_description_trgm",
+            "description",
+            postgresql_using="gin",
+            postgresql_ops={"description": "gin_trgm_ops"},
+        ),
+        Index(
+            "idx_products_brand_trgm",
+            "brand",
+            postgresql_using="gin",
+            postgresql_ops={"brand": "gin_trgm_ops"},
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)

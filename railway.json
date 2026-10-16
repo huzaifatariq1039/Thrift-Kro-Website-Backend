@@ -8,7 +8,7 @@
     "preDeployCommand": [
       "python -m scripts.migrate"
     ],
-    "startCommand": "python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --ws-max-size 2800000 --proxy-headers --forwarded-allow-ips '*' --timeout-graceful-shutdown 30",
+    "startCommand": "python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --ws-max-size 2800000 --proxy-headers --forwarded-allow-ips '*' --timeout-graceful-shutdown 30",
     "healthcheckPath": "/health/ready",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
