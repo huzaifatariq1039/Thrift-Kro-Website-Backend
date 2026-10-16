@@ -4,25 +4,32 @@ CRUD operations for Shopping Cart and Wishlist.
 Cart uses the CartSession → CartItem → ProductVariant chain.
 All writes are atomic with rollback on failure.
 """
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy.exc import IntegrityError
 from uuid import UUID
 from typing import List, Optional, Tuple
 
 from app.models.shopping import CartSession, CartItem, WishlistItem
 from app.models.product import Product, ProductVariant, ProductStatusEnum
+from app.models.user import User
 
 
 # ─── Cart Session Helpers ─────────────────────────────────────────────
 
 def _get_or_create_cart_session(db: Session, user_id: UUID) -> CartSession:
-    """Get the user's cart session, or create one if it doesn't exist."""
-    session = db.query(CartSession).filter(CartSession.user_id == user_id).first()
-    if not session:
-        session = CartSession(user_id=user_id)
-        db.add(session)
-        db.flush()
-    return session
+    """Create the user's cart once, then lock it for the current write."""
+    statement = (
+        pg_insert(CartSession)
+        .values(user_id=user_id)
+        .on_conflict_do_nothing(index_elements=[CartSession.user_id])
+    )
+    db.execute(statement)
+    return (
+        db.query(CartSession)
+        .filter(CartSession.user_id == user_id)
+        .with_for_update()
+        .one()
+    )
 
 
 # ─── Shopping Cart ────────────────────────────────────────────────────
@@ -35,6 +42,9 @@ def add_to_cart(
     Returns (CartItem, error_message). If successful, error_message is None.
     """
     try:
+        if quantity <= 0:
+            return None, "Quantity must be at least 1"
+
         # Validate variant exists and has stock
         variant = (
             db.query(ProductVariant)
@@ -63,36 +73,43 @@ def add_to_cart(
         # Get or create cart session
         cart_session = _get_or_create_cart_session(db, user_id)
 
-        # Check if this variant is already in cart
-        existing = db.query(CartItem).filter(
-            CartItem.cart_session_id == cart_session.id,
-            CartItem.product_variant_id == product_variant_id,
-        ).first()
-
-        if existing:
-            # Update quantity
-            new_qty = existing.quantity + quantity
-            if new_qty > variant.quantity_in_stock:
-                return None, f"Cannot add more. Only {variant.quantity_in_stock} in stock, you already have {existing.quantity} in cart"
-            existing.quantity = new_qty
-            db.commit()
-            db.refresh(existing)
-            return existing, None
-
-        # Add new cart item
-        cart_item = CartItem(
+        insert_statement = pg_insert(CartItem).values(
             cart_session_id=cart_session.id,
             product_variant_id=product_variant_id,
             quantity=quantity,
         )
-        db.add(cart_item)
-        db.commit()
-        db.refresh(cart_item)
-        return cart_item, None
+        next_quantity = CartItem.quantity + insert_statement.excluded.quantity
+        statement = (
+            insert_statement.on_conflict_do_update(
+                index_elements=[
+                    CartItem.cart_session_id,
+                    CartItem.product_variant_id,
+                ],
+                set_={"quantity": next_quantity},
+                where=next_quantity <= variant.quantity_in_stock,
+            )
+            .returning(CartItem.id)
+        )
+        cart_item_id = db.execute(statement).scalar_one_or_none()
 
-    except IntegrityError:
-        db.rollback()
-        return None, "Product variant is already in a cart"
+        if cart_item_id is None:
+            existing_quantity = (
+                db.query(CartItem.quantity)
+                .filter(
+                    CartItem.cart_session_id == cart_session.id,
+                    CartItem.product_variant_id == product_variant_id,
+                )
+                .scalar()
+            )
+            db.rollback()
+            return None, (
+                f"Cannot add more. Only {variant.quantity_in_stock} in stock, "
+                f"you already have {existing_quantity or 0} in cart"
+            )
+
+        db.commit()
+        return db.get(CartItem, cart_item_id), None
+
     except Exception:
         db.rollback()
         raise
@@ -213,24 +230,36 @@ def toggle_wishlist(db: Session, user_id: UUID, product_id: UUID) -> Tuple[bool,
     Toggle a product in the user's wishlist.
     Returns (is_in_wishlist, message).
     """
-    product = db.query(Product).filter(Product.id == product_id).first()
-    if not product:
-        return False, "Product not found"
+    try:
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            return False, "Product not found"
 
-    existing = db.query(WishlistItem).filter(
-        WishlistItem.user_id == user_id,
-        WishlistItem.product_id == product_id,
-    ).first()
+        # A toggle is a read-modify-write operation. Locking the owner makes two
+        # concurrent toggles equivalent to two deterministic sequential toggles,
+        # including when the wishlist row does not exist yet.
+        (
+            db.query(User.id)
+            .filter(User.id == user_id)
+            .with_for_update()
+            .one()
+        )
+        existing = db.query(WishlistItem).filter(
+            WishlistItem.user_id == user_id,
+            WishlistItem.product_id == product_id,
+        ).first()
 
-    if existing:
-        db.delete(existing)
-        db.commit()
-        return False, "Removed from wishlist"
-    else:
-        new_item = WishlistItem(user_id=user_id, product_id=product_id)
-        db.add(new_item)
+        if existing:
+            db.delete(existing)
+            db.commit()
+            return False, "Removed from wishlist"
+
+        db.add(WishlistItem(user_id=user_id, product_id=product_id))
         db.commit()
         return True, "Added to wishlist"
+    except Exception:
+        db.rollback()
+        raise
 
 
 def get_user_wishlist(db: Session, user_id: UUID) -> List[WishlistItem]:

@@ -11,7 +11,7 @@ from app.schemas.shopping import (
     WishlistSummary, WishlistItemResponse,
     AddToCartRequest, UpdateCartItemRequest, CartCheckoutRequest,
 )
-from app.api.deps import get_db, get_current_active_user, get_current_buyer
+from app.api.deps import get_db, get_current_buyer
 import app.crud.shopping as crud_shopping
 
 router = APIRouter()
@@ -20,7 +20,7 @@ router = APIRouter()
 # ─── Shopping Cart ────────────────────────────────────────────────────
 
 @router.get("/cart", response_model=CartSummary)
-def get_cart(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def get_cart(db: Session = Depends(get_db), current_user: User = Depends(get_current_buyer)):
     """Get the current user's shopping cart with all item details."""
     items = crud_shopping.get_user_cart(db, current_user.id)
 
@@ -38,7 +38,7 @@ def get_cart(db: Session = Depends(get_db), current_user: User = Depends(get_cur
 def add_to_cart(
     payload: AddToCartRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_buyer),
 ):
     """Add a product variant to the cart."""
     item, error = crud_shopping.add_to_cart(
@@ -53,7 +53,7 @@ def add_to_cart(
 def remove_from_cart(
     cart_item_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_buyer),
 ):
     """Remove a specific item from the cart by its cart_item_id."""
     removed = crud_shopping.remove_from_cart(db, current_user.id, cart_item_id)
@@ -67,7 +67,7 @@ def update_cart_item(
     cart_item_id: UUID,
     payload: UpdateCartItemRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_buyer),
 ):
     """Update the quantity of a cart item. Set to 0 to remove."""
     item, error = crud_shopping.update_cart_item_quantity(
@@ -81,7 +81,7 @@ def update_cart_item(
 
 
 @router.delete("/cart/clear")
-def clear_cart(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def clear_cart(db: Session = Depends(get_db), current_user: User = Depends(get_current_buyer)):
     """Clear all items from the cart."""
     crud_shopping.clear_cart(db, current_user.id)
     return {"detail": "Cart cleared"}
@@ -141,7 +141,7 @@ def checkout_cart(
 # ─── Wishlist ─────────────────────────────────────────────────────────
 
 @router.get("/wishlist", response_model=WishlistSummary)
-def get_wishlist(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def get_wishlist(db: Session = Depends(get_db), current_user: User = Depends(get_current_buyer)):
     """Get the current user's wishlist."""
     items = crud_shopping.get_user_wishlist(db, current_user.id)
     wishlist_items = [WishlistItemResponse.from_wishlist_item(item) for item in items]
@@ -155,7 +155,7 @@ def get_wishlist(db: Session = Depends(get_db), current_user: User = Depends(get
 def toggle_wishlist(
     product_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_buyer),
 ):
     """Toggle a product in the wishlist (adds if missing, removes if present)."""
     added, message = crud_shopping.toggle_wishlist(db, current_user.id, product_id)
