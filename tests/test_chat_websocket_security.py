@@ -70,7 +70,7 @@ class ChatWebSocketSecurityTests(unittest.TestCase):
     def test_rejects_path_identity_that_does_not_match_token(self):
         token = "session-bound-test-token"
         context = SimpleNamespace(user=self.user)
-        with patch("app.api.v1.routers.chat.validate_access_token", return_value=context):
+        with patch("app.services.websocket_auth.validate_access_token", return_value=context):
             with self.assertRaises(WebSocketDisconnect) as caught:
                 with self.client.websocket_connect(
                     f"/chat/ws/chat/{uuid4()}",
@@ -82,7 +82,7 @@ class ChatWebSocketSecurityTests(unittest.TestCase):
     def test_persists_authenticated_sender_for_authorized_order(self):
         token = "session-bound-test-token"
         context = SimpleNamespace(user=self.user)
-        with patch("app.api.v1.routers.chat.validate_access_token", return_value=context):
+        with patch("app.services.websocket_auth.validate_access_token", return_value=context):
             with self.client.websocket_connect(
                 f"/chat/ws/chat/{self.buyer_id}",
                 subprotocols=["bearer", token],
@@ -106,7 +106,7 @@ class ChatWebSocketSecurityTests(unittest.TestCase):
         token = "session-bound-test-token"
         attacker_selected_receiver = uuid4()
         context = SimpleNamespace(user=self.user)
-        with patch("app.api.v1.routers.chat.validate_access_token", return_value=context):
+        with patch("app.services.websocket_auth.validate_access_token", return_value=context):
             with self.client.websocket_connect(
                 f"/chat/ws/chat/{self.buyer_id}",
                 subprotocols=["bearer", token],

@@ -13,4 +13,16 @@ def read_users_me(current_user: User = Depends(get_current_active_user)):
 
 @router.put("/me", response_model=UserResponse)
 def update_user_me(user_update: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    if (
+        user_update.email is not None
+        and str(user_update.email).strip().casefold()
+        != current_user.email.strip().casefold()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Email changes require a dedicated verification flow and are "
+                "not available in this release"
+            ),
+        )
     return crud_user.update_user(db=db, user_id=str(current_user.id), user_update=user_update)

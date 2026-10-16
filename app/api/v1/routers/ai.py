@@ -7,12 +7,17 @@ capability is unavailable instead of executing placeholder or obsolete code.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_seller, get_db
-from app.models.user import User
+from app.models.user import RoleEnum, User, VerificationStatusEnum
 from app.schemas.ai import VerificationResultResponse
+from app.services.websocket_auth import (
+    WebSocketAuthenticationError,
+    authenticate_websocket_user,
+    get_websocket_bearer_token,
+)
 import app.crud.product as crud_product
 import app.crud.verification as crud_verification
 
@@ -67,8 +72,22 @@ def get_verification_status(
 async def websocket_verify(
     websocket: WebSocket,
     product_id: str,
-    token: str = Query(...),
+    db: Session = Depends(get_db),
 ):
-    """Close truthfully while the production verification engine is deferred."""
-    del product_id, token
+    """Authenticate securely, then report that inference remains deferred."""
+    del product_id
+    try:
+        token = get_websocket_bearer_token(websocket)
+        current_user = authenticate_websocket_user(token, db)
+        if (
+            current_user.role != RoleEnum.SELLER
+            or current_user.seller_profile is None
+            or current_user.seller_profile.verification_status
+            != VerificationStatusEnum.APPROVED
+        ):
+            raise WebSocketAuthenticationError("Verified seller access required")
+    except WebSocketAuthenticationError as exc:
+        await websocket.close(code=1008, reason=str(exc))
+        return
+
     await websocket.close(code=1013, reason=VERIFICATION_UNAVAILABLE_DETAIL)

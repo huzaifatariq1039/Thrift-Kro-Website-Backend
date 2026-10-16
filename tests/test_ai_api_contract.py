@@ -12,10 +12,12 @@ from fastapi import HTTPException
 os.environ.setdefault("SECRET_KEY", "test-only-secret-key-with-at-least-32-characters")
 
 from app.api.v1.routers import ai
+from app.models.user import RoleEnum, VerificationStatusEnum
 
 
 class RecordingWebSocket:
-    def __init__(self):
+    def __init__(self, protocols=None):
+        self.scope = {"subprotocols": protocols or []}
         self.close_code = None
         self.close_reason = None
 
@@ -91,27 +93,70 @@ class AIApiContractTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 404)
 
-    def test_deferred_websocket_closes_without_running_inference(self):
-        websocket = RecordingWebSocket()
-
-        asyncio.run(
-            ai.websocket_verify(
-                websocket=websocket,
-                product_id=str(uuid4()),
-                token="unused-while-deferred",
-            )
+    def test_deferred_websocket_authenticates_verified_seller_without_query_token(self):
+        websocket = RecordingWebSocket(["bearer", "session-bound-test-token"])
+        seller = SimpleNamespace(
+            role=RoleEnum.SELLER,
+            seller_profile=SimpleNamespace(
+                verification_status=VerificationStatusEnum.APPROVED,
+            ),
         )
+
+        with patch.object(ai, "authenticate_websocket_user", return_value=seller):
+            asyncio.run(
+                ai.websocket_verify(
+                    websocket=websocket,
+                    product_id=str(uuid4()),
+                    db=object(),
+                )
+            )
 
         self.assertEqual(websocket.close_code, 1013)
         self.assertIn("not available", websocket.close_reason)
 
         source = inspect.getsource(ai.websocket_verify)
+        self.assertNotIn("Query", source)
         for obsolete_attribute in (
             "condition_score",
             "verified_at",
             "image_url",
         ):
             self.assertNotIn(obsolete_attribute, source)
+
+    def test_deferred_websocket_rejects_missing_credentials(self):
+        websocket = RecordingWebSocket()
+
+        asyncio.run(
+            ai.websocket_verify(
+                websocket=websocket,
+                product_id=str(uuid4()),
+                db=object(),
+            )
+        )
+
+        self.assertEqual(websocket.close_code, 1008)
+        self.assertIn("Authentication required", websocket.close_reason)
+
+    def test_deferred_websocket_rejects_unverified_seller(self):
+        websocket = RecordingWebSocket(["bearer", "session-bound-test-token"])
+        seller = SimpleNamespace(
+            role=RoleEnum.SELLER,
+            seller_profile=SimpleNamespace(
+                verification_status=VerificationStatusEnum.PENDING,
+            ),
+        )
+
+        with patch.object(ai, "authenticate_websocket_user", return_value=seller):
+            asyncio.run(
+                ai.websocket_verify(
+                    websocket=websocket,
+                    product_id=str(uuid4()),
+                    db=object(),
+                )
+            )
+
+        self.assertEqual(websocket.close_code, 1008)
+        self.assertIn("Verified seller", websocket.close_reason)
 
 
 if __name__ == "__main__":
