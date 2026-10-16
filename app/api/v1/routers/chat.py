@@ -126,7 +126,10 @@ async def websocket_endpoint(
 
             event = {
                 "type": "message",
-                "message": MessageResponse.model_validate(db_message).model_dump(mode="json"),
+                "message": MessageResponse.model_validate(db_message).model_dump(
+                    mode="json",
+                    by_alias=True,
+                ),
             }
             await websocket.send_json(event)
             await manager.send_personal_message(event, incoming.receiver_id)

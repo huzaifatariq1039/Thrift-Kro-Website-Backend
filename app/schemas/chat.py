@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from uuid import UUID
 from datetime import datetime
 
@@ -16,13 +16,12 @@ class MessageCreate(BaseModel):
         return value
 
 class MessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     sender_id: UUID
     receiver_id: UUID
     seller_order_id: UUID | None
     content: str
-    timestamp: datetime = Field(validation_alias="created_at")
+    created_at: datetime = Field(serialization_alias="timestamp")
     is_read: bool
-
-    class Config:
-        from_attributes = True
