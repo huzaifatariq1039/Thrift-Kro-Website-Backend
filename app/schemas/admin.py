@@ -6,3 +6,9 @@ class AdminStatsResponse(BaseModel):
     products: Dict[str, Any]
     orders: Dict[str, Any]
     revenue: Dict[str, Any]
+
+
+# Backward-compatible import path for routers and external code.
+from app.schemas.admin_reporting import (  # noqa: E402
+    AdminStatsResponse as AdminStatsResponse,  # noqa: F811
+)

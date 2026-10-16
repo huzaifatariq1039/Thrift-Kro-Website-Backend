@@ -56,3 +56,10 @@ def get_platform_stats(db: Session) -> AdminStatsResponse:
             "gross_merchandise_value_pkr": total_gmv
         }
     )
+
+
+# Keep this legacy module as the router-facing compatibility boundary while the
+# typed implementation lives in the reporting service.
+from app.services.admin_reporting import (  # noqa: E402
+    get_platform_stats as get_platform_stats,  # noqa: F811
+)
