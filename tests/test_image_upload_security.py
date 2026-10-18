@@ -91,14 +91,21 @@ class ImageUploadSecurityTests(unittest.TestCase):
         upload = FakeUpload(make_image_bytes("PNG"), "image/png")
         with patch(
             "app.services.upload.cloudinary.uploader.upload",
-            return_value={"secure_url": "https://example.test/safe.jpg"},
+            return_value={
+                "secure_url": "https://example.test/safe.jpg",
+                "public_id": "thriftkro/products/safe",
+            },
         ) as provider_upload:
-            url = asyncio.run(upload_image_to_cloudinary(upload))
+            stored = asyncio.run(upload_image_to_cloudinary(upload))
 
-        self.assertEqual(url, "https://example.test/safe.jpg")
+        self.assertEqual(stored.secure_url, "https://example.test/safe.jpg")
+        self.assertEqual(stored.provider_public_id, "thriftkro/products/safe")
+        self.assertEqual(stored.content_type, "image/jpeg")
+        self.assertEqual((stored.width, stored.height), (8, 8))
         safe_content = provider_upload.call_args.args[0]
         self.assertTrue(safe_content.startswith(b"\xff\xd8\xff"))
         self.assertEqual(provider_upload.call_args.kwargs["format"], "jpg")
+        self.assertEqual(provider_upload.call_args.kwargs["quality"], "auto:good")
 
     def test_base64_frame_is_strictly_validated(self):
         with self.assertRaisesRegex(ImageValidationError, "valid base64"):

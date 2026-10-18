@@ -36,7 +36,7 @@ class DocumentationContractTests(unittest.TestCase):
 
         for statement in (
             "Current Implementation Guide",
-            "20261016_14",
+            "20261018_15",
             "CheckoutOrder",
             "SellerOrder",
             "5 percent",

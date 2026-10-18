@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import uuid
+from dataclasses import dataclass
 
 import cloudinary
 import cloudinary.uploader
@@ -27,6 +28,21 @@ _CLOUDINARY_CIRCUIT = ProviderCircuitBreaker(
     recovery_seconds=30,
 )
 _CLOUDINARY_RETRY_POLICY = RetryPolicy(max_attempts=2, base_delay_seconds=0.1)
+_CLOUDINARY_DELETE_CIRCUIT = ProviderCircuitBreaker(
+    "cloudinary_delete",
+    failure_threshold=5,
+    recovery_seconds=30,
+)
+
+
+@dataclass(frozen=True)
+class StoredImage:
+    secure_url: str
+    provider_public_id: str
+    content_type: str
+    byte_size: int
+    width: int
+    height: int
 
 
 def _is_transient_cloudinary_error(exc: Exception) -> bool:
@@ -48,10 +64,10 @@ cloudinary.config(
 )
 
 
-async def upload_image_to_cloudinary(file: UploadFile) -> str:
+async def upload_image_to_cloudinary(file: UploadFile) -> StoredImage:
     """
     Validates and uploads an image file to Cloudinary.
-    Returns the secure HTTPS URL of the uploaded image.
+    Returns the provider identity and normalized image metadata.
     """
     try:
         validated = await read_validated_image_upload(file)
@@ -71,6 +87,8 @@ async def upload_image_to_cloudinary(file: UploadFile) -> str:
                 folder="thriftkro/products",
                 resource_type="image",
                 format=validated.extension,
+                quality="auto:good",
+                flags="strip_profile",
                 overwrite=True,
                 timeout=15,
             ),
@@ -80,9 +98,22 @@ async def upload_image_to_cloudinary(file: UploadFile) -> str:
         )
 
         secure_url = result.get("secure_url")
-        if not secure_url or not secure_url.startswith("https://"):
-            raise RuntimeError("Storage provider returned no secure URL")
-        return secure_url
+        provider_public_id = result.get("public_id")
+        if (
+            not secure_url
+            or not secure_url.startswith("https://")
+            or not provider_public_id
+        ):
+            raise RuntimeError("Storage provider returned incomplete asset identity")
+        width, height = validated.image.size
+        return StoredImage(
+            secure_url=secure_url,
+            provider_public_id=provider_public_id,
+            content_type=validated.mime_type,
+            byte_size=len(validated.content),
+            width=width,
+            height=height,
+        )
     except ProviderCircuitOpenError as exc:
         logger.warning("Image upload circuit is open")
         raise HTTPException(
@@ -99,3 +130,21 @@ async def upload_image_to_cloudinary(file: UploadFile) -> str:
             status_code=502,
             detail="Image storage is temporarily unavailable",
         ) from exc
+
+
+def delete_image_from_cloudinary(provider_public_id: str) -> None:
+    """Idempotently destroy a managed image using its provider identity."""
+    result = call_with_resilience(
+        lambda: cloudinary.uploader.destroy(
+            provider_public_id,
+            resource_type="image",
+            invalidate=True,
+            timeout=15,
+        ),
+        circuit=_CLOUDINARY_DELETE_CIRCUIT,
+        retry_if=_is_transient_cloudinary_error,
+        policy=_CLOUDINARY_RETRY_POLICY,
+    )
+    provider_result = result.get("result") if isinstance(result, dict) else None
+    if provider_result not in {"ok", "not found"}:
+        raise RuntimeError("Storage provider did not confirm image deletion")

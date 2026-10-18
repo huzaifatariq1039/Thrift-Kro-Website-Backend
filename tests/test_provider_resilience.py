@@ -125,8 +125,16 @@ class ProviderResilienceTests(unittest.TestCase):
 
     def test_cloudinary_upload_is_timeout_bounded_idempotent_and_retried(self):
         upload._CLOUDINARY_CIRCUIT.reset()
-        validated = SimpleNamespace(content=b"safe-image", extension="png")
-        uploaded = {"secure_url": "https://res.cloudinary.com/example/image.png"}
+        validated = SimpleNamespace(
+            content=b"safe-image",
+            extension="png",
+            mime_type="image/png",
+            image=SimpleNamespace(size=(10, 12)),
+        )
+        uploaded = {
+            "secure_url": "https://res.cloudinary.com/example/image.png",
+            "public_id": "thriftkro/products/example",
+        }
 
         with (
             patch.object(
@@ -143,7 +151,8 @@ class ProviderResilienceTests(unittest.TestCase):
         ):
             result = asyncio.run(upload.upload_image_to_cloudinary(object()))
 
-        self.assertEqual(result, uploaded["secure_url"])
+        self.assertEqual(result.secure_url, uploaded["secure_url"])
+        self.assertEqual(result.provider_public_id, uploaded["public_id"])
         self.assertEqual(provider_upload.call_count, 2)
         for call in provider_upload.call_args_list:
             self.assertEqual(call.kwargs["timeout"], 15)
@@ -156,7 +165,12 @@ class ProviderResilienceTests(unittest.TestCase):
                 upload,
                 "read_validated_image_upload",
                 new=AsyncMock(
-                    return_value=SimpleNamespace(content=b"safe-image", extension="png")
+                    return_value=SimpleNamespace(
+                        content=b"safe-image",
+                        extension="png",
+                        mime_type="image/png",
+                        image=SimpleNamespace(size=(10, 12)),
+                    )
                 ),
             ),
             patch.object(

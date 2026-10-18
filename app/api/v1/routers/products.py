@@ -23,6 +23,7 @@ from app.models.product import ConditionEnum
 import app.crud.product as crud_product
 from app.api.deps import get_db, get_current_verified_seller, get_current_seller
 from app.api.pagination import PageLimit, PageOffset
+from app.services.media_lifecycle import MediaAssetValidationError
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -89,7 +90,9 @@ def get_my_products(
 def download_csv_template():
     """
     Download a sample CSV template with the correct column headers and an example row.
-    Sellers can fill this out and upload via POST /products/import-csv.
+    Sellers can fill this out and upload via POST /products/import-csv. Image
+    values must be exact URLs returned by POST /upload/image for this seller;
+    arbitrary external URLs are rejected.
     """
     output = io.StringIO()
     writer = csv.writer(output)
@@ -100,8 +103,8 @@ def download_csv_template():
         "Classic 90s style denim jacket",     # description
         "2500",                               # price
         "5000",                               # original_price
-        "https://example.com/jacket.jpg",     # image_url
-        "https://example.com/img2.jpg|https://example.com/img3.jpg",  # images (pipe-separated)
+        "PASTE_FIRST_UPLOAD_URL_HERE",        # image_url
+        "PASTE_SECOND_UPLOAD_URL_HERE|PASTE_THIRD_UPLOAD_URL_HERE",  # images
         "Jackets",                            # category
         "Men",                                # department
         "L",                                  # size
@@ -133,11 +136,14 @@ def create_product(
     current_seller: User = Depends(get_current_verified_seller),
 ):
     """Create a new product listing. Requires verified seller."""
-    return crud_product.create_product(
-        db=db,
-        product=product,
-        seller_id=current_seller.id,
-    )
+    try:
+        return crud_product.create_product(
+            db=db,
+            product=product,
+            seller_id=current_seller.id,
+        )
+    except MediaAssetValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/import-csv", response_model=CSVImportResponse)
@@ -334,7 +340,14 @@ def update_product(
     if product.seller_id != current_seller.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this product")
 
-    return crud_product.update_product(db=db, product_id=id, product_update=product_update)
+    try:
+        return crud_product.update_product(
+            db=db,
+            product_id=id,
+            product_update=product_update,
+        )
+    except MediaAssetValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.delete("/{id}")

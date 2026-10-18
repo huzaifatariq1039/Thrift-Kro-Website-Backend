@@ -9,6 +9,13 @@ os.environ.setdefault("SECRET_KEY", "test-only-secret-key-with-at-least-32-chara
 
 from app.crud.product import create_product
 from app.models.product import Category, ConditionEnum
+from app.models.media import (
+    MediaAsset,
+    MediaModerationStatusEnum,
+    MediaPurposeEnum,
+    MediaStatusEnum,
+    MediaVisibilityEnum,
+)
 from app.models.user import RoleEnum, User
 from app.schemas.product import ProductCreate
 
@@ -42,6 +49,23 @@ class CatalogPostgresIntegrationTests(unittest.TestCase):
             category = Category(name=f"Jackets {marker}", slug=f"jackets-{marker}")
             db.add_all([seller, category])
             db.flush()
+            image_url = f"https://media.example.test/{marker}/jacket.jpg"
+            asset = MediaAsset(
+                owner_id=seller.id,
+                provider="cloudinary",
+                provider_public_id=f"thriftkro/products/{marker}",
+                secure_url=image_url,
+                purpose=MediaPurposeEnum.PRODUCT_IMAGE,
+                visibility=MediaVisibilityEnum.PUBLIC,
+                status=MediaStatusEnum.PENDING,
+                moderation_status=MediaModerationStatusEnum.NOT_REVIEWED,
+                content_type="image/jpeg",
+                byte_size=128,
+                width=10,
+                height=10,
+            )
+            db.add(asset)
+            db.flush()
 
             product = create_product(
                 db,
@@ -53,7 +77,7 @@ class CatalogPostgresIntegrationTests(unittest.TestCase):
                         "category_id": category.id,
                         "images": [
                             {
-                                "image_url": "https://media.example.test/jacket.jpg",
+                                "image_url": image_url,
                                 "is_primary": True,
                             }
                         ],
@@ -73,6 +97,8 @@ class CatalogPostgresIntegrationTests(unittest.TestCase):
             self.assertEqual(product.category.id, category.id)
             self.assertEqual(len(product.images), 1)
             self.assertTrue(product.images[0].is_primary)
+            self.assertEqual(product.images[0].media_asset_id, asset.id)
+            self.assertEqual(asset.status, MediaStatusEnum.ATTACHED)
             self.assertEqual(len(product.variants), 1)
             self.assertEqual(product.variants[0].attributes, {"size": "M"})
             self.assertEqual([tag.tag_name for tag in product.tags], ["denim"])

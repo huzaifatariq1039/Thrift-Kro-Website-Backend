@@ -5,9 +5,15 @@ All write operations use atomic transactions with rollback on failure.
 """
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
+from datetime import timedelta
 from app.models.product import Product, ProductImage, ProductVariant, ProductTag, Category
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.services.product_variants import reconcile_product_variants
+from app.services.media_lifecycle import (
+    claim_public_product_image,
+    restore_product_media,
+    schedule_product_media_deletion,
+)
 from uuid import UUID
 from typing import Optional, List
 
@@ -120,9 +126,15 @@ def create_product(
 
         # Create images
         for img_data in product.images:
+            asset = claim_public_product_image(
+                db,
+                owner_id=seller_id,
+                secure_url=img_data.image_url,
+            )
             db_image = ProductImage(
                 product_id=db_product.id,
-                image_url=img_data.image_url,
+                media_asset_id=asset.id,
+                image_url=asset.secure_url,
                 is_primary=img_data.is_primary,
                 display_order=img_data.display_order,
             )
@@ -191,9 +203,15 @@ def bulk_create_products(db: Session, products_data: list, seller_id: UUID) -> l
             # Create primary image from image_url
             image_url = data.get("image_url", "")
             if image_url:
+                asset = claim_public_product_image(
+                    db,
+                    owner_id=seller_id,
+                    secure_url=image_url,
+                )
                 db.add(ProductImage(
                     product_id=db_product.id,
-                    image_url=image_url,
+                    media_asset_id=asset.id,
+                    image_url=asset.secure_url,
                     is_primary=True,
                     display_order=0,
                 ))
@@ -201,9 +219,15 @@ def bulk_create_products(db: Session, products_data: list, seller_id: UUID) -> l
             # Create additional images
             for idx, img_url in enumerate(data.get("images", []), start=1):
                 if img_url.strip():
+                    asset = claim_public_product_image(
+                        db,
+                        owner_id=seller_id,
+                        secure_url=img_url.strip(),
+                    )
                     db.add(ProductImage(
                         product_id=db_product.id,
-                        image_url=img_url.strip(),
+                        media_asset_id=asset.id,
+                        image_url=asset.secure_url,
                         is_primary=False,
                         display_order=idx,
                     ))
@@ -254,12 +278,21 @@ def update_product(db: Session, product_id: UUID, product_update: ProductUpdate)
         # Handle images replacement
         images_data = update_data.pop("images", None)
         if images_data is not None:
-            # Delete existing images and replace
-            db.query(ProductImage).filter(ProductImage.product_id == product_id).delete()
+            # Retire existing provider objects and replace them with owned pending assets.
+            schedule_product_media_deletion(db, product_id=product_id, retention=timedelta())
+            db.query(ProductImage).filter(ProductImage.product_id == product_id).delete(
+                synchronize_session=False
+            )
             for img_data in images_data:
+                asset = claim_public_product_image(
+                    db,
+                    owner_id=db_product.seller_id,
+                    secure_url=img_data["image_url"],
+                )
                 db.add(ProductImage(
                     product_id=product_id,
-                    image_url=img_data["image_url"],
+                    media_asset_id=asset.id,
+                    image_url=asset.secure_url,
                     is_primary=img_data.get("is_primary", False),
                     display_order=img_data.get("display_order", 0),
                 ))
@@ -299,6 +332,7 @@ def delete_product(db: Session, product_id: UUID) -> bool:
     if not db_product:
         return False
     db_product.deleted_at = datetime.now(timezone.utc)
+    schedule_product_media_deletion(db, product_id=product_id)
     db.commit()
     return True
 
@@ -307,6 +341,9 @@ def restore_product(db: Session, product_id: UUID) -> bool:
     """Restore a soft-deleted product."""
     db_product = db.query(Product).filter(Product.id == product_id).first()
     if not db_product:
+        return False
+    if not restore_product_media(db, product_id=product_id):
+        db.rollback()
         return False
     db_product.deleted_at = None
     db.commit()

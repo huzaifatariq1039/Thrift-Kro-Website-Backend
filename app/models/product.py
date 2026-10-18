@@ -162,12 +162,19 @@ class ProductImage(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    media_asset_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("media_assets.id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
     image_url = Column(String, nullable=False)
     is_primary = Column(Boolean, default=False)
     display_order = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     product = relationship("Product", back_populates="images")
+    media_asset = relationship("MediaAsset")
 
 class ProductTag(Base):
     __tablename__ = "product_tags"

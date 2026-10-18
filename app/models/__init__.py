@@ -11,3 +11,10 @@ from .support import SupportTicket, TicketTypeEnum, TicketStatusEnum
 from .notification import Notification, NotificationTypeEnum
 from .auth import AuthAccount, AuthSession, AuthActionToken, AuthThrottle, AuthSecurityEvent
 from .audit import AuditEvent
+from .media import (
+    MediaAsset,
+    MediaModerationStatusEnum,
+    MediaPurposeEnum,
+    MediaStatusEnum,
+    MediaVisibilityEnum,
+)

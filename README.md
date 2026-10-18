@@ -95,5 +95,7 @@ that temporary database.
 - `docs/operations/observability.md` defines request correlation and audit-event
   handling.
 - `docs/operations/kyc-data-protection.md` defines the fail-closed KYC policy.
+- `docs/operations/media-lifecycle.md` defines upload ownership, public/private
+  separation, retention, cleanup, and provider deletion procedures.
 - `PRODUCTION_READINESS_AUDIT.md` is the historical audit and remediation
   backlog, not a description of current behavior.
