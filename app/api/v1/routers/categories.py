@@ -21,25 +21,49 @@ router = APIRouter()
 @router.get("/", response_model=List[CategoryResponse])
 def list_categories(
     flat: bool = False,
-    include_inactive: bool = False,
     skip: PageOffset = 0,
     limit: PageLimit = 100,
     db: Session = Depends(get_db),
 ):
     """
-    List categories. By default returns top-level categories with nested subcategories.
+    List active categories. By default returns top-level categories with active
+    nested subcategories.
     Set flat=true for a flat list of all categories.
     """
     if flat:
         return crud_category.get_all_categories(
             db,
-            include_inactive=include_inactive,
+            include_inactive=False,
             skip=skip,
             limit=limit,
         )
     return crud_category.get_categories(
         db,
-        include_inactive=include_inactive,
+        include_inactive=False,
+        skip=skip,
+        limit=limit,
+    )
+
+
+@router.get("/admin", response_model=List[CategoryResponse])
+def list_categories_for_admin(
+    flat: bool = False,
+    skip: PageOffset = 0,
+    limit: PageLimit = 100,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Admin: List active and inactive categories for catalog management."""
+    if flat:
+        return crud_category.get_all_categories(
+            db,
+            include_inactive=True,
+            skip=skip,
+            limit=limit,
+        )
+    return crud_category.get_categories(
+        db,
+        include_inactive=True,
         skip=skip,
         limit=limit,
     )
@@ -47,8 +71,8 @@ def list_categories(
 
 @router.get("/{category_id}", response_model=CategoryResponse)
 def get_category(category_id: UUID, db: Session = Depends(get_db)):
-    """Get a single category by ID with its subcategories."""
-    category = crud_category.get_category(db, category_id)
+    """Get an active category by ID with active subcategories."""
+    category = crud_category.get_active_category(db, category_id)
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     return category
@@ -56,8 +80,8 @@ def get_category(category_id: UUID, db: Session = Depends(get_db)):
 
 @router.get("/slug/{slug}", response_model=CategoryResponse)
 def get_category_by_slug(slug: str, db: Session = Depends(get_db)):
-    """Get a category by its URL slug."""
-    category = crud_category.get_category_by_slug(db, slug)
+    """Get an active category by its URL slug."""
+    category = crud_category.get_active_category_by_slug(db, slug)
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     return category

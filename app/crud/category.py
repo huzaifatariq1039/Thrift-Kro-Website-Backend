@@ -2,11 +2,20 @@
 CRUD operations for Categories.
 """
 import re
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, with_loader_criteria
 from app.models.product import Category
 from app.schemas.category import CategoryCreate, CategoryUpdate
 from uuid import UUID
 from typing import Optional, List
+
+
+def _active_tree_options():
+    """Keep inactive descendants out of public category response trees."""
+    return with_loader_criteria(
+        Category,
+        lambda category: category.is_active.is_(True),
+        include_aliases=True,
+    )
 
 
 def _generate_slug(name: str) -> str:
@@ -41,7 +50,7 @@ def get_categories(
     """Get a bounded page of top-level categories with their subcategories."""
     query = db.query(Category).filter(Category.parent_id == None)  # noqa: E711
     if not include_inactive:
-        query = query.filter(Category.is_active == True)  # noqa: E712
+        query = query.options(_active_tree_options()).filter(Category.is_active.is_(True))
     return query.order_by(Category.name.asc(), Category.id.asc()).offset(skip).limit(limit).all()
 
 
@@ -54,7 +63,7 @@ def get_all_categories(
     """Get a bounded page of categories as a flat list."""
     query = db.query(Category)
     if not include_inactive:
-        query = query.filter(Category.is_active == True)  # noqa: E712
+        query = query.options(_active_tree_options()).filter(Category.is_active.is_(True))
     return query.order_by(Category.name.asc(), Category.id.asc()).offset(skip).limit(limit).all()
 
 
@@ -64,6 +73,26 @@ def get_category(db: Session, category_id: UUID) -> Optional[Category]:
 
 def get_category_by_slug(db: Session, slug: str) -> Optional[Category]:
     return db.query(Category).filter(Category.slug == slug).first()
+
+
+def get_active_category(db: Session, category_id: UUID) -> Optional[Category]:
+    """Get an active category and only active descendants for public use."""
+    return (
+        db.query(Category)
+        .options(_active_tree_options())
+        .filter(Category.id == category_id, Category.is_active.is_(True))
+        .first()
+    )
+
+
+def get_active_category_by_slug(db: Session, slug: str) -> Optional[Category]:
+    """Get an active category by slug for public use."""
+    return (
+        db.query(Category)
+        .options(_active_tree_options())
+        .filter(Category.slug == slug, Category.is_active.is_(True))
+        .first()
+    )
 
 
 def create_category(db: Session, data: CategoryCreate) -> Category:

@@ -34,6 +34,25 @@ def get_product(db: Session, product_id: UUID) -> Optional[Product]:
     )
 
 
+def get_public_product(db: Session, product_id: UUID) -> Optional[Product]:
+    """Get a non-deleted product for the public catalog."""
+    return (
+        db.query(Product)
+        .options(
+            joinedload(Product.images),
+            joinedload(Product.variants),
+            joinedload(Product.tags),
+            joinedload(Product.category),
+            joinedload(Product.seller),
+        )
+        .filter(
+            Product.id == product_id,
+            Product.deleted_at.is_(None),
+        )
+        .first()
+    )
+
+
 def get_products(
     db: Session,
     skip: int = 0,

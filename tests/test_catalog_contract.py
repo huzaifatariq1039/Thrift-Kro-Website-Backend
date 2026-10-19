@@ -79,6 +79,25 @@ class CatalogContractTests(unittest.TestCase):
             & schema["properties"].keys()
         )
 
+    def test_public_catalog_does_not_offer_archival_visibility_flags(self):
+        openapi = app.openapi()
+
+        product_parameters = {
+            parameter["name"]
+            for parameter in openapi["paths"]["/api/v1/products/"]["get"]["parameters"]
+        }
+        category_parameters = {
+            parameter["name"]
+            for parameter in openapi["paths"]["/api/v1/categories/"]["get"]["parameters"]
+        }
+
+        self.assertNotIn("include_deleted", product_parameters)
+        self.assertNotIn("include_inactive", category_parameters)
+        self.assertIn("/api/v1/categories/admin", openapi["paths"])
+        self.assertTrue(
+            openapi["paths"]["/api/v1/categories/admin"]["get"]["security"]
+        )
+
     def test_category_hierarchy_has_correct_relationship_directions(self):
         relationships = Category.__mapper__.relationships
 

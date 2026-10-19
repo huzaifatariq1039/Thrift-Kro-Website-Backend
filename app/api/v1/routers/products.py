@@ -49,10 +49,9 @@ def get_products(
     max_price: Optional[float] = None,
     sort_by: Optional[str] = "newest",
     seller_id: Optional[UUID] = None,
-    include_deleted: Optional[bool] = False,
     db: Session = Depends(get_db),
 ):
-    """List products with optional filtering, search, and sorting."""
+    """List non-deleted public products with filtering, search, and sorting."""
     products = crud_product.get_products(
         db,
         skip=skip,
@@ -65,7 +64,7 @@ def get_products(
         max_price=max_price,
         sort_by=sort_by,
         seller_id=seller_id,
-        include_deleted=include_deleted,
+        include_deleted=False,
     )
     return products
 
@@ -122,8 +121,8 @@ def download_csv_template():
 
 @router.get("/{id}", response_model=ProductResponse)
 def get_product(id: UUID, db: Session = Depends(get_db)):
-    """Get a single product by ID with all relationships."""
-    product = crud_product.get_product(db, product_id=id)
+    """Get a non-deleted public product by ID with all relationships."""
+    product = crud_product.get_public_product(db, product_id=id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
     return product
