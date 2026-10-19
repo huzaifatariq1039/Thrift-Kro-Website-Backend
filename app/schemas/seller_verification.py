@@ -24,8 +24,8 @@ class SellerVerificationCreate(BaseModel):
     cnic_number: Optional[str] = None
     cnic_front_url: str
     cnic_back_url: str
-    shop_photo_urls: List[str] = []
-    products_proof: List[VerificationProductSchema] = []
+    shop_photo_urls: List[str] = Field(default_factory=list)
+    products_proof: List[VerificationProductSchema] = Field(default_factory=list)
     ai_verified: bool = False
     business_reg_url: Optional[str] = None
 
@@ -43,8 +43,8 @@ class SellerVerificationResponse(BaseModel):
     cnic_front_url: str
     cnic_back_url: str
     business_reg_url: Optional[str] = None
-    shop_photo_urls: List[str] = []
-    products_proof: List[VerificationProductSchema] = []
+    shop_photo_urls: List[str] = Field(default_factory=list)
+    products_proof: List[VerificationProductSchema] = Field(default_factory=list)
     ai_verified: bool = False
     status: VerificationStatusEnum
     rejection_reason: Optional[str] = None

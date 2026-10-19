@@ -45,7 +45,12 @@ class Category(Base):
     image_url = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     parent = relationship("Category", remote_side=[id], back_populates="subcategories")
     subcategories = relationship("Category", back_populates="parent")
@@ -101,7 +106,12 @@ class Product(Base):
     is_ai_verified = Column(Boolean, default=False)
     verification_hash = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     seller = relationship("User", back_populates="products")
@@ -144,7 +154,12 @@ class ProductVariant(Base):
     is_active = Column(Boolean, default=True, server_default="true", nullable=False)
     archived_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     product = relationship("Product", back_populates="variants")
     

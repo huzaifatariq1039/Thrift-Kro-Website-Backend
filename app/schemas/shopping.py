@@ -34,7 +34,7 @@ class CartItemVariantInfo(BaseModel):
     """Variant info embedded in cart items."""
     id: UUID
     sku: Optional[str] = None
-    attributes: dict = {}
+    attributes: dict = Field(default_factory=dict)
     price_adjustment: float = 0.0
     quantity_in_stock: int = 1
 

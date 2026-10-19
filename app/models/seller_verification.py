@@ -55,8 +55,18 @@ class SellerVerificationRequest(Base):
     cnic_front_url = Column(String, nullable=False)
     cnic_back_url = Column(String, nullable=False)
     business_reg_url = Column(String, nullable=True)
-    shop_photo_urls = Column(JSON, default=[])
-    products_proof = Column(JSON, default=[])
+    shop_photo_urls = Column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::json"),
+    )
+    products_proof = Column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::json"),
+    )
     ai_verified = Column(Boolean, default=False)
     
     # Review
@@ -75,7 +85,12 @@ class SellerVerificationRequest(Base):
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
     
     # Relationships
     seller_profile = relationship(

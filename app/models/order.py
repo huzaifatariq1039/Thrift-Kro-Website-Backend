@@ -57,7 +57,12 @@ class CheckoutOrder(Base):
     billing_address_snapshot = Column(JSONB, nullable=True)
     idempotency_key = Column(String(128), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     buyer = relationship("User", foreign_keys=[buyer_id])
     seller_orders = relationship("SellerOrder", back_populates="checkout_order", cascade="all, delete-orphan")
@@ -92,7 +97,12 @@ class SellerOrder(Base):
     shipped_at = Column(DateTime(timezone=True), nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     checkout_order = relationship("CheckoutOrder", back_populates="seller_orders")
     seller = relationship("User", foreign_keys=[seller_id])
@@ -136,7 +146,12 @@ class OrderPayment(Base):
     recorded_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     settled_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     seller_order = relationship("SellerOrder", back_populates="payment")
     recorded_by = relationship("User", foreign_keys=[recorded_by_id])

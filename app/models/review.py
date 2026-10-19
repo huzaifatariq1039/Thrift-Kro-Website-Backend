@@ -38,7 +38,12 @@ class Review(Base):
     comment = Column(Text, nullable=True)
     is_verified_purchase = Column(Boolean, default=False, server_default="false", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     buyer = relationship("User", foreign_keys=[buyer_id])
     product = relationship("Product")

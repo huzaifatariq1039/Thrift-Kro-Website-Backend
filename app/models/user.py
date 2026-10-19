@@ -50,7 +50,12 @@ class User(Base):
     google_id = Column(String, unique=True, nullable=True, index=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     seller_profile = relationship("SellerProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     wallet = relationship("Wallet", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -72,7 +77,12 @@ class UserAddress(Base):
     country = Column(String, default="Pakistan", nullable=False)
     is_default = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     user = relationship("User", back_populates="addresses")
 
@@ -95,7 +105,12 @@ class SellerProfile(Base):
     rating = Column(Float, default=0.0)
     review_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     user = relationship("User", back_populates="seller_profile")
     verification_requests = relationship("SellerVerificationRequest", back_populates="seller_profile", cascade="all, delete-orphan")
@@ -116,7 +131,12 @@ class Wallet(Base):
     )
     currency = Column(String, default="PKR")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     user = relationship("User", back_populates="wallet")
     transactions = relationship("Transaction", back_populates="wallet", cascade="all, delete-orphan")
