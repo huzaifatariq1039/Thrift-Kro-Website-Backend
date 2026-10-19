@@ -12,10 +12,9 @@ Order Flow:
 from datetime import datetime, timezone
 from collections import defaultdict
 from decimal import Decimal
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from uuid import UUID
 
@@ -24,8 +23,8 @@ from app.models.order import (
     PaymentMethodEnum, PaymentStatusEnum, OrderStatusEnum,
 )
 from app.models.shopping import CartSession, CartItem
-from app.models.product import Product, ProductStatusEnum, ProductVariant
-from app.models.user import User, Wallet, Transaction, TransactionTypeEnum, UserAddress
+from app.models.product import ProductStatusEnum, ProductVariant
+from app.models.user import Wallet, Transaction, TransactionTypeEnum, UserAddress
 from app.core.money import money, ZERO_MONEY
 from app.core.observability import current_request_id
 from app.services.audit import record_audit_event

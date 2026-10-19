@@ -17,7 +17,6 @@ from app.core.observability import (
     _JsonRequestFormatter,
     current_request_id,
     request_logger,
-    request_metrics,
 )
 from app.services.audit import record_audit_event
 from app.services.auth_lifecycle import record_security_event

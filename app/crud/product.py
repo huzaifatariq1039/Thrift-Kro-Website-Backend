@@ -376,8 +376,6 @@ def mark_product_verified(
     similarity_score: float = None,
 ) -> Optional[Product]:
     """Mark a product as AI-verified with cryptographic proof."""
-    from datetime import datetime, timezone
-
     db_product = db.query(Product).filter(Product.id == product_id).first()
     if not db_product:
         return None

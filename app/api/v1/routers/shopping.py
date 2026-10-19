@@ -131,7 +131,7 @@ def checkout_cart(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result)
 
     return {
-        "detail": f"Order placed successfully",
+        "detail": "Order placed successfully",
         "order_id": str(result.id),
         "total_amount": result.total_amount,
         "seller_orders_count": len(result.seller_orders),
