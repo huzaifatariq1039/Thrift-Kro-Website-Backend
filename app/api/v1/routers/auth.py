@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
+import os
 from uuid import UUID
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from google.auth.exceptions import TransportError
 from google.auth.transport import requests as google_requests
@@ -42,6 +44,7 @@ from app.services.auth_lifecycle import (
     revoke_session,
     rotate_refresh_token,
     utcnow,
+    REFRESH_TOKEN_DAYS,
 )
 from app.services.provider_resilience import (
     ProviderCircuitBreaker,
@@ -60,6 +63,8 @@ _GOOGLE_IDENTITY_CIRCUIT = ProviderCircuitBreaker(
     recovery_seconds=30,
 )
 _GOOGLE_RETRY_POLICY = RetryPolicy(max_attempts=2, base_delay_seconds=0.1)
+_REFRESH_COOKIE_NAME = "thrift_kro_refresh"
+_REFRESH_COOKIE_PATH = "/api/v1/auth"
 
 
 class _BoundedGoogleRequest(google_requests.Request):
@@ -106,12 +111,57 @@ def _consume_limit(db: Session, **kwargs) -> None:
         ) from exc
 
 
-def _token_response(pair) -> AuthTokenResponse:
+def _token_response(pair, *, expose_refresh_token: bool = True) -> AuthTokenResponse:
     return AuthTokenResponse(
         access_token=pair.access_token,
-        refresh_token=pair.refresh_token,
+        refresh_token=pair.refresh_token if expose_refresh_token else None,
         expires_in=pair.expires_in,
     )
+
+
+def _remember_session(request: Request) -> bool:
+    return request.headers.get("x-remember-session", "").strip().lower() == "true"
+
+
+def _uses_cookie_session(request: Request) -> bool:
+    return request.headers.get("x-session-transport", "").strip().lower() == "cookie"
+
+
+def _refresh_cookie_secure() -> bool:
+    return os.getenv("APP_ENV", "development").strip().lower() == "production"
+
+
+def _set_refresh_cookie(response: Response, request: Request, refresh_token: str) -> None:
+    secure = _refresh_cookie_secure()
+    response.set_cookie(
+        key=_REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        max_age=REFRESH_TOKEN_DAYS * 24 * 60 * 60 if _remember_session(request) else None,
+        httponly=True,
+        secure=secure,
+        samesite="none" if secure else "lax",
+        path=_REFRESH_COOKIE_PATH,
+    )
+
+
+def _delete_refresh_cookie(response: Response) -> None:
+    secure = _refresh_cookie_secure()
+    response.delete_cookie(
+        key=_REFRESH_COOKIE_NAME,
+        httponly=True,
+        secure=secure,
+        samesite="none" if secure else "lax",
+        path=_REFRESH_COOKIE_PATH,
+    )
+
+
+def _invalid_refresh_response() -> JSONResponse:
+    response = JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": "Invalid refresh token"},
+    )
+    _delete_refresh_cookie(response)
+    return response
 
 
 def _fetch_google_userinfo(access_token: str) -> dict:
@@ -223,9 +273,14 @@ def register(
     return db_user
 
 
-@router.post("/login", response_model=AuthTokenResponse)
+@router.post(
+    "/login",
+    response_model=AuthTokenResponse,
+    response_model_exclude_none=True,
+)
 def login(
     request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
@@ -295,20 +350,27 @@ def login(
         db.commit()
         raise HTTPException(status_code=403, detail="Email verification is required")
 
-    return _token_response(
-        issue_session(
-            db,
-            user,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
+    pair = issue_session(
+        db,
+        user,
+        ip_address=ip_address,
+        user_agent=user_agent,
     )
+    cookie_session = _uses_cookie_session(request)
+    if cookie_session:
+        _set_refresh_cookie(response, request, pair.refresh_token)
+    return _token_response(pair, expose_refresh_token=not cookie_session)
 
 
-@router.post("/google", response_model=AuthTokenResponse)
+@router.post(
+    "/google",
+    response_model=AuthTokenResponse,
+    response_model_exclude_none=True,
+)
 def google_auth(
     body: GoogleAuthRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ):
     ip_address, user_agent = _request_identity(request)
@@ -401,21 +463,28 @@ def google_auth(
 
     ensure_auth_account(db, user.id, email_verified=True)
     db.commit()
-    return _token_response(
-        issue_session(
-            db,
-            user,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            event_type="google_login_succeeded",
-        )
+    pair = issue_session(
+        db,
+        user,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        event_type="google_login_succeeded",
     )
+    cookie_session = _uses_cookie_session(request)
+    if cookie_session:
+        _set_refresh_cookie(response, request, pair.refresh_token)
+    return _token_response(pair, expose_refresh_token=not cookie_session)
 
 
-@router.post("/refresh", response_model=AuthTokenResponse)
+@router.post(
+    "/refresh",
+    response_model=AuthTokenResponse,
+    response_model_exclude_none=True,
+)
 def refresh_token(
-    body: RefreshTokenRequest,
     request: Request,
+    response: Response,
+    body: RefreshTokenRequest | None = None,
     db: Session = Depends(get_db),
 ):
     ip_address, user_agent = _request_identity(request)
@@ -427,21 +496,32 @@ def refresh_token(
         window_seconds=900,
         block_seconds=900,
     )
+    raw_refresh_token = (
+        body.refresh_token
+        if body is not None
+        else request.cookies.get(_REFRESH_COOKIE_NAME)
+    )
+    if not raw_refresh_token:
+        return _invalid_refresh_response()
     try:
         pair = rotate_refresh_token(
             db,
-            body.refresh_token,
+            raw_refresh_token,
             ip_address=ip_address,
             user_agent=user_agent,
         )
-    except AuthenticationError as exc:
-        raise HTTPException(status_code=401, detail="Invalid refresh token") from exc
-    return _token_response(pair)
+    except AuthenticationError:
+        return _invalid_refresh_response()
+    cookie_session = _uses_cookie_session(request) and body is None
+    if cookie_session:
+        _set_refresh_cookie(response, request, pair.refresh_token)
+    return _token_response(pair, expose_refresh_token=not cookie_session)
 
 
 @router.post("/logout", response_model=AuthMessageResponse)
 def logout(
     request: Request,
+    response: Response,
     context: AuthContext = Depends(get_current_auth_context),
     db: Session = Depends(get_db),
 ):
@@ -453,12 +533,14 @@ def logout(
         ip_address=ip_address,
         user_agent=user_agent,
     )
+    _delete_refresh_cookie(response)
     return AuthMessageResponse(message="Signed out")
 
 
 @router.post("/logout-all", response_model=AuthMessageResponse)
 def logout_all(
     request: Request,
+    response: Response,
     context: AuthContext = Depends(get_current_auth_context),
     db: Session = Depends(get_db),
 ):
@@ -470,6 +552,7 @@ def logout_all(
         ip_address=ip_address,
         user_agent=user_agent,
     )
+    _delete_refresh_cookie(response)
     return AuthMessageResponse(message="All sessions signed out")
 
 

@@ -13,7 +13,7 @@ _PASSWORD_PATTERN = re.compile(
 
 class AuthTokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
+    refresh_token: str | None = None
     token_type: Literal["bearer"] = "bearer"
     expires_in: int
 
